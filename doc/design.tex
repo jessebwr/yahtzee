@@ -1,0 +1,128 @@
+\documentclass[12pt,letterpaper]{article}
+\input{"../../template preamble.tex"}
+\usepackage{fancyhdr}
+
+\pagestyle{fancy}
+\setlength{\headheight}{13.6pt}
+
+\newcommand{\tm}{\tt{tournament manager}}
+\newcommand{\pl}{\tt{player}}
+\newcommand{\Tm}{\tt{Tournament manager}}
+\newcommand{\Pl}{\tt{Player}}
+\newcommand{\yahtz}{$\text{\emph{Yahtzee}}^\text{\textregistered}$}
+
+
+\author{Alex Melville \and David Scott \and Jesse Watts-Russell}
+\title{An Algorithm For Distributed Tournament \yahtz}
+\date{April 21, 2014}
+
+\lhead{Alex Melville, David Scott, Jesse Watts-Russell}
+\begin{document}
+
+\maketitle
+
+\onehalfspacing
+
+\section*{Protocol/Algorithm Description}
+
+In the below description, it is intended that \pl{} processes are referred to with the pronoun ``it'' as processes are non-sentient, even though a \pl{} typically represents a user, which could potentially be a human.  Anywhere a gendered pronoun is used should be assumed to be an error.  The distinction between a \pl{} [process] and a user is material, if not overly crucial, throughout this writeup.
+
+\vskip.2in
+
+In our setup, there are two types of proceses: \tm s and \pl s.  We assume that there only exists a single \tm{} whose identity is ``magically'' known to all \pl s (so we are not concerned with uniquely identifying a \tm{} in our protocol); there can be an arbitrary number of \pl s.  One underlying assumption we make is that \tm s are infallible; i.e. a \tm{} will never conspire with players to allow a certain player to cheat; anytime a choice needs to be made, that choice will be made as fairly possible; and the \tm{} will never fail (network-wise) unexpectedly.
+
+\vskip.1in
+The \tm{} handles all logic related to:
+\begin{itemize}
+\item User information, including authentication and play statistics.  This requires little more than intelligent use of some database-like structures.
+
+\item Starting and running tournaments, including storing all necessary information about in-progress tournaments such as the playoff bracket.
+
+\item Tracking each \pl 's progress in its current match, including ending the match as soon as one player has won, or ``restarting'' the match with giving the two players independent die rolls if the match reaches the ``draw'' condition.
+
+\item Playing games of \yahtz, including rolling dice and keeping track of the most recent turn's die rolls in order to check for cheating.  May require some clever use of data structures in order to properly handle games where the \pl s are allowed distinct die rolls (i.e. games where the two players have ``equivalent'' strategies, as specified in the assignment).
+
+\item Handling cheating \pl s (where cheating can be impossibly-scored turns, illegally-scored turns, or retroactively re-scored turns).  When a \pl{} is caught cheating, that \pl{} immediately forfeits all its current matches, is entirely removed from the collection of players waiting for a tournament, and the user is added to a blacklist.  Users on the blacklist are not allowed to enqueue for any future tournaments.
+
+\item Handling players who become nonresponsive (for whatever reason).  This is handled as specified in the assignment.  Timeouts are implemented in a non-blocking fashion.  If a user who is actively playing in a tournament logs [back] in within the timeout period, the \tm{} ensures that the \pl{} is prepared to continue playing, and then does so. 
+\end{itemize}
+\vskip.1in
+
+This leaves the \pl{} to handle only:
+\begin{itemize}
+\item Deciding to log in, and creating a password if necessary.  The \pl{} then keeps track of the password in some ``secure'' fashion for the duration of a ``session'' (the time from when a user logs in successfully to a \tm{} until the \pl{} disconnects from the \tm{} (by experiencing a fault or by the user logging out)).
+
+\item Deciding to log out
+
+\item Deciding to enter into a \yahtz{} tournament
+%The player cannot choose a specific tournament.  The same player may be enqueued multiple times (and/or actively playing in multiple tournaments simultaneously) but may never be entered into a particular tournament more than once.
+
+\item Deciding to leave a \yahtz{} tournament (whether or not that tournament has begun)
+
+\item Deciding what actions to take within a game (which dice to re-roll, and how to score the turn).  This requires keeping and updating a running score card for each game the \pl{} is actively playing, which should be done with an appropriate data structure.
+\end{itemize}
+
+
+\subsection*{Messages}
+Below we have listed the messages that will be passed around between \tm s and \pl s.  
+
+For messages where a \pl{} sends a password to the \tm, unless otherwise specified, the following protocol is observed.
+
+If the password is correct, no response is sent; if it is not, a \tt{not\_authenticated} message is sent.  This is because a non-malicious \pl{} who logged in with a correct password must still know the password, so can simply assume that the request succeeded; we don't need to be overly concerned with malicious users, but can be nice and send them a failure message anyway.
+
+\begin{description}
+\item[\{Username, Password, logout\}:] A \pl{} sends this message to a \tm{} when it wants to log out.  The password is required as a security measure, to prevent a malicious player from simply logging out its opponent and thereby winning the game by default.
+
+\item[\{Pid, login, Username, Password\}:] A \pl{} sends this message to a \tm{} when it wants to log in.  Password is either a password or the atom \tt{false} if the user does not have a password yet (i.e. is not registered).  It is assumed that a non-malicious \pl{} keeps track of its password indefinitely after a successful login attempt.
+
+\item[\{authenticated, ActiveTournaments, PendingTournaments\}:] A \tm{} sends this message to a \pl{} who has successfully logged in.  \tt{ActiveTournaments} is an integer of the number of tournaments the \pl{} is currently actively playing in; \tt{PendingTournaments} is the number of tournaments the \pl{} is enqueued for that have not yet begun.
+
+If \tt{ActiveTournaments} is positive, then the player should expect to resume the match they were a part of by soon receiving a \tt{dice} message from the tournament manager.
+
+\item[\{not\_authenticated\}:] A \tm{} sends this message to a \pl{} who attemped to log in with a username that is already logged in, or if the \pl{} tried to perform some action that requires authentication but gave an incorrect password.
+
+\item[\{new\_user\}:] A \tm{} sends this message to a \pl{} who has signed in using an unregistered username.
+
+\item[\{new\_password, Username, NewPassword, OldPassword\}:] A \pl{} sends this message to a \tm{} when the \pl{} wants to change their password.  For a new player, \tt{OldPassword} should be simply the atom \tt{false}.
+
+\item[\{Username, Password, enqueueMe\}:] A \pl{} sends this message to \tm{} when it wants to enter another tournament.  The \tm{} simply adds the given user to a collection of waiting players from which players will be pulled when the next tournament is set to begin.  This collection must allow duplicate elements (in some fashion), and is likely to be implemented as a queue, though this is not necessarily the case; there is no guarantee that players will begin a tournament in the same order they signed up.  (In fact, this cannot be the case; if it were, it would be possible for a player to enter the same tournament multiple times).
+
+\item[\{Username, Password, dequeueMe\}:] A \pl{} sends this message to a \tm{} when it wants to be enqueued one less time for a new tournament.
+
+\item[\{dice, TournamentRef, GameRef, DiceSequence\}:] A \tm{} sends this message to \pl{} whose game is in progress.  \tt{DiceSequence} is a collection of up to 5 integers between 1 and 6 representing die rolls.  \tt{TournamentRef} and \tt{GameRef} are \tt{ref}s uniquely identifying the particular tournament or game, respectively.  Neither is generated until the particular tournament or game is actually started.
+
+\item[\{Username, Password, modification, TournamentRef, GameRef, DiceSequence\}:] After a\\ \pl{} receives a collection of dice, if it is allowed more modification attempts in the given turn, it may send some number of dice back to the \tm.  When a \pl{} does this, it expects to receive in response another \tt{dice} message.
+
+\item[\{Username, Password, end\_turn, DiceSequence, ScoreUpdate\}:] When a \pl{} has used up its two allowed modification attempts or otherwise decided to end its turn, it tells the \tm{} what dice it ended up with and how it decided to score that turn.  This is entirely to make it easy for the \tm{} to check for cheating: both the \pl{} and \tm{} keep track of an entire scorecard for every turn, and at each update the \tm{} ensures that the update was legal.  This also makes it easy for the \tm{} to determine the game's winner at the end.
+
+\item[\{Username, Password, drop\_tournament, TournamentRef\}:] When a \pl{} wants to drop out of a particular tournament that it is actively playing in, it sends this message to the \tm.  The \pl{} can simply ignore any further messages concerning the given tournament since even if the \tt{drop} request fails, the error-handling protocol implemented by the \tm{} will deal with the player appropriately after it fails to respond within some timeout.
+
+\item[\{tournament\_over, TournamentRef\}:] Sent by a \tm{} to a \pl{} who has finished participating in a tournament, by either being knocked out or by winning the whole thing.
+
+\item[\{Username, stats\_request\}:] Sent by a \pl{} to the \tm{} when it wants to know the game-win statistics of the given user.  The given user can be anyone since all player statistics are public information.
+
+\item[\{stats, Username, UserStats\}:] The response to a \tt{stats\_request} nessage sent by a \tm{} to a \pl{}.  \tt{UserStats} in some way encapsulates relevant statistics about the given user.
+
+\item[\{start\_tournament, MaxPlayers\}:] A message sent from a mysterious source in the \ae ther to a \tm{} telling the \tm{} to begin a tournament using as many of the ``next'' (for whatever definition of ``next'' the \tm{} finds appropriate) distinct \tt{MaxPlayers} enqueued players as possible.  Since it is impossible for a \pl{} to gain an advantage from illegitimately initiating a tournament, there is no need for authentication here.
+
+%  \item[ \{Ref, ManagerID, standby/rejoin,wrongPassword, Info\}]: A manager sends this message containing its PID to a player in response to a login request. There are three types of responses. The first is "standby" which is sent when a player successfully logs in for the first time. In this first case the "Info" object is not used. The second type of response is "rejoin" which means the player has logged back in and needs to rejoin a game they logged out or crashed into. In this case the Info tuple contains two objects: GamesWon, which is the number of games won in the player's ongoing match, and OpponentName, which is a name that the player can use to communicate to their opponent.
+%
+%  \item[ \{Ref, ManagerID, startMatch, OpponentName, RefereeID, MatchID\}]: A manager sends this message containing its PID to a player once it has gathered the required number of players for a tournament, and it needs players to start playing matches. The MatchID is a number that identifies this current match, because a player might be playing in multiple tournaments at the same time with the same manager, and so it needs a way to differentiate the matches when sending messages. The player uses OpponentName to communicate with another player and start a match. The RefereeID is the ID of a process spawned by the manager which will collect the dice rolls and modification decisions of each player after each round in order to make sure neither player is cheating. The players will send their dice rolls and modification information to the referee process after each game, receive confirmation from the referee process, and continue on to the next game. Note that the manager only sends this message to one of the two players, so that two players don't both try to initiate a match with the referee simultaneously.
+%
+%\item[ \{Ref, game/match, MatchID, WinnerPID, LoserPID\}]: The referee for a match sends this message to a manager with the results of a match or a game, depending on whether the second argument contains the atom "game" or "match". The manager will use the winner and loser PID's to update each players' win/loss record or either a game or for a game within that match. 
+
+
+\end{description}
+
+\section*{Correctness}
+
+Most of the correctness of this protocol is explained throughout the description of the protocol.  The most important claim, though, is that this protocol enables the construction of a fully-functional application that conforms to the design specifications and allows for the implementation of every required feature.
+
+Since the above description primarily concerns itself with the communication protocol and not the implementation details of any algorithms, all major potential sources of failure (user-password authentication, game-playing strategy, cheating detection) are abstracted away in this description, where any such algorithms are simply assumed to be correct.  Ensuring that a particular implementation of this protocol is correct and satisfies all the requirements will require additional work to ensure the correctness of implementation-specific choices in algorithms.
+
+
+\end{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%
+%% YOU ARE DONE DUDE %%
+%%%%%%%%%%%%%%%%%%%%%%%
