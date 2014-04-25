@@ -22,6 +22,17 @@
 		 code_change/3, 
 		 terminate/2]).
 
+define(userInfo, ?UserInfo).
+define(currentPlayerInfo, ?CPI).
+define(tournamentInfo, ?TournamentInfo).
+define(timeOutRefs, ?TimeOutRefs).
+
+
+-record(user, {password,
+							 match_wins = 0,
+							 match_losses = 0,
+							 tournaments_played = 0,
+							 tournaments_won = 0}).
 
 -record(match, {p1ListOfDice,
 				p2ListOfDice,
@@ -34,20 +45,21 @@
 				gid,
 				tid,
 				numScorecardsChecked = 0,
-				seed
+				seed,
+				gamesPerMatch
 				}).
 
--record(tournament, {listOfPlayersWithSeeds,
-					 listOfInProgressMatches,
-					 tid,
-					 status = inProgress,
+-record(tournament, {dictOfSeedsWithPlayers = dict:new(),
+					 listOfInProgressMatches = [],
+					 status = in_progress,
 					 winner = undefined,
-					 numPlayersRegistered = 0
+					 numPlayersReplied = 0,
+					 numNeededReplies,
+					 gamesPerMatch,
+					 started = false
 					 }).
 
--record(tm, {userInfo,
-			 tournamentInfo,
-			 playerDict}). % A dictionary of Username:{Pid, MonitorRef, LoginTicket}
+-record(tm, {playerDict}). % A dictionary of Username:{Pid, MonitorRef, LoginTicket}
 
 
 %%%============================================================================
@@ -74,16 +86,20 @@ main([StrNodeName]) ->
 %%%============================================================================
 
 init({}) ->
-	% UserInfo will hold {password, match-wins, match-losses, tournaments-played, 
-	%					  tournaments-wins}
-	UserInfo = ets:new(dontMatter, [set, protected]),
+	% UserInfo will hold 
+	% Username: user record (see above)
+	ets:new(?UserInfo, [set, protected, named_table]),
 
-	% TournamentInfo will hold tid : {status, winner}
-	TournamentInfo = ets:new(dontMatter, [set, protected]),
+	% TournamentInfo will hold tid : #tournament
+	ets:new(?TournamentInfo, [set, protected, named_table]),
 
-	{ok, #tm{userInfo = UserInfo,
-		  tournamentInfo = TournamentInfo,
-		  playerDict = dict:new()}}.
+	ets:new(?TimeOutRefs, [set, protected, named_table]),
+
+
+	% Username : {[{Tid, [Gids]}]}
+	ets:new(?CPI, [set, protected, named_table]),
+
+	{ok, #tm{playerDict = dict:new()}}.
 
 handle_call(_, _, S) ->
 	{reply, ok, S}.
@@ -101,26 +117,25 @@ handle_cast(_, S) ->
 %% @doc This message is received from a player and is used to log into the 
 %% tournament manager
 handle_info({login, Pid, Username, {Username, Password}}, TMState) ->
-	UserInfo = TMState#tm.userInfo,
 	PlayerDict = TMState#tm.playerDict,
 	LoginTicket = make_ref(),
 
-	case ets:lookup(UserInfo, Username) of
+	case ets:lookup(?UserInfo, Username) of
 		[] ->
-			ets:insert(UserInfo, {Username, {Password, 0, 0, 0, 0}}),
+			ets:insert(?UserInfo, {Username, #user{password = Password}}),
 			MonitorRef = monitor(process, Pid),
 			NewPlayerDict = dict:append(Username, {Pid, MonitorRef, LoginTicket}, PlayerDict),
-			Pid ! {loggedIn, self(), Username, LoginTicket},
+			Pid ! {logged_in, self(), Username, LoginTicket},
 			{noreply, TMState#tm{playerDict = NewPlayerDict}};
 
 		[{Username, {Password, _, _, _, _}}] ->
 			MonitorRef = monitor(process, Pid),
 			NewPlayerDict = dict:append(Username, {Pid, MonitorRef, LoginTicket}, PlayerDict),
-			Pid ! {loggedIn, self(), Username, LoginTicket},
+			Pid ! {logged_in, self(), Username, LoginTicket},
 			{noreply, TMState#tm{playerDict = NewPlayerDict}};
 
 		[{Username, {_DiffPassword, _, _, _, _}}] ->
-			Pid ! {incorrectPassword, Username},
+			Pid ! {incorrect_password, Username},
 			{noreply, TMState}
 	end;
 
@@ -139,7 +154,7 @@ handle_info({logout, Pid, Username, LoginTicket}, TMState) ->
 			NewPlayerDict = dict:erase(Username, PlayerDict),
 			{noreply, TMState#tm{playerDict = NewPlayerDict}};
 		false ->
-			Pid ! {incorrectLoginTicket, Username},
+			Pid ! {incorrect_login_ticket, Username},
 			{noreply, TMState}
 	end;
 
@@ -148,7 +163,29 @@ handle_info({logout, Pid, Username, LoginTicket}, TMState) ->
 %%						 									-> {noreply, S};
 %% @doc This message indicated that the player is willing to play in the
 %% specified tournament
-%%handle_info({acceptTournament, Pid, Username, {Tid, LoginTicket}}, TMState) ->
+
+handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, TMState) ->
+	[{_, TimeOutRef}] = ets:lookup(?TimeOutRefs, {Username, Tid}),
+	ets:delete(?TimeOutRefs, {Username, Tid}),
+	timer:cancel(TimeOutRef),
+
+	[{Tid, T}] = ets:lookup(?TournamentInfo, Tid),
+	case T#tournament.started of
+		true ->
+			{noreply, TMState};
+		false ->
+			NewDictOfSeedsWithPlayers = dict:append(0, Username, T#tournament.dictOfSeedsWithPlayers), 
+			NumPlayersReplied = T#tournament.numPlayersReplied + 1,
+			case NumPlayersReplied == T#tournament.numNeededReplies of
+				true ->
+					NewTM = T#tournament{dictOfSeedsWithPlayers = NewDictOfSeedsWithPlayers,
+										 numPlayersReplied = NumPlayersReplied,
+										 started = true},
+					start_tournament(Tid, NewTM),
+					{noreply, TMState};
+
+					
+
 	
 
 
@@ -158,7 +195,27 @@ handle_info({logout, Pid, Username, LoginTicket}, TMState) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%% RECIEVING MESSAGES FROM THE OUTSIDE WORLD %%%%%%%%%%%%%%%%%%%
 
-% handle_info({requestTournament, Pid, {NumPlayers, GamesPerMatch}}, TMState) ->
+handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, TMState) ->
+	case (NumPlayers rem 2) == 1 of
+		true ->
+			Tid = make_ref(),
+			PlayerDict = TMState#tm.playerDict,
+			PlayerList = dict:fetch_keys(PlayerDict),
+			{NumChosenPlayers, ChosenPlayers} = shuffle(PlayerList, NumPlayers),
+
+			NewTournament = #tournament{numNeededReplies = NumChosenPlayers,
+							 										gamesPerMatch = GamesPerMatch}
+
+			lists:foreach(fun(X) -> 
+							handle_ask_player(X, dict:fetch(X), Tid) end,
+							ChosenPlayers),
+			ets:insert(?TournamentInfo, {Tid, NewTournament}),
+			{noreply, TMState};
+
+		false ->
+			{noreply, TMState}
+	end;
+
 
 
 %%%%%%%%%%%%%%%% END RECIEVING MESSAGES FROM THE OUTSIDE WORLD %%%%%%%%%%%%%%%%
@@ -190,3 +247,88 @@ timestamp() ->
     io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w.~p", 
                   [YY, MM, DD, Hour, Min, Sec, Micros]).
 
+
+shuffle(List, K) ->
+	{A, B, C} = now(),
+	random:seed(A,B,C),
+	Shuffled = [X||{_,X} <- lists:sort([ {random:uniform(), N} || N <- List])],
+	Chosen = lists:sublist(Shuffled, K),
+	Num = length(Chosen),
+	{Num, Chosen}.
+
+
+
+
+start_tournament(Tid, T) ->
+	DictOfSeedsWithPlayers = T#tournament.dictOfSeedsWithPlayers,
+	ZeroSeedPlayers = dictFetch(0, DictOfSeedsWithPlayers),
+	GamesPerMatch = T#tournament.gamesPerMatch,
+	case length(ZeroSeedPlayers) == 0 of
+		true ->
+			ets:insert(?TournamentInfo, {Tid, T#tournament{status = complete});
+		
+		false ->	
+			case length(ZeroSeedPlayers) == 1 of
+				true ->
+					{Winner, 0} = hd(ZeroSeedPlayers),
+					ets:insert(?TournamentInfo, {Tid, T#tournament{ZeroSeedPlayers = dict:new(),
+																												 status = complete,
+																												 winner = Winner}}),
+					[{Winner, UserData}] = ets:lookup(?UserInfo, Winner),
+					TournamentWins = UserData#user.tournaments_won + 1,
+					TournamentsPlayed = UserData#user.tournaments_played + 1,
+					NewUserData = UserData#user{tournaments_played = TournamentsPlayed,
+																			tournaments_won = TournamentWins},
+
+					ets:insert(?UserInfo, {Winner, NewUserData});
+
+				false ->
+					make_matches
+
+% -record(match, {p1ListOfDice,
+% 				p2ListOfDice,
+% 				p1ScoreCard = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
+% 				p2ScoreCard = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
+% 				p1ID,
+% 				p2ID,
+% 				p1WinLoss = {0, 0},
+% 				p2WinLoss = {0, 0},
+% 				gid,
+% 				tid,
+% 				numScorecardsChecked = 0,
+% 				seed,
+% 				gamesPerMatch
+% 				}).
+
+
+% -record(tournament, {dictOfSeedsWithPlayers,
+% 					 listOfInProgressMatches,
+% 					 status = in_progress,
+% 					 winner = undefined,
+% 					 numPlayersReplied = 0,
+% 					 numNeededReplies,
+% 					 gamesPerMatch,
+% 					 started = false
+% 					 }).
+
+
+make_matches(Tid, T) ->
+	DictOfSeedsWithPlayers = T#tournament.dictOfSeedsWithPlayers,
+	GamesPerMatch = T#tournament.gamesPerMatch,	
+
+
+
+handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
+	Pid ! {start_tournament, self(), ChosenPlayer, Tid},
+	{ok, TimerRef} = timer:send_after(60000, {reject_tournament, Pid, ChosenPlayer, {Tid, LoginTicket}}),
+	ets:insert(?TimeOutRefs, {{ChosenPlayer, Tid}, TimerRef}),
+	ok.
+
+
+dictFetch(Key, Dict) ->
+	try dict:fetch(Key, Dict) of
+		Moo -> Moo
+	catch
+		_:_ -> []
+	end.
+	
