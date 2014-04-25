@@ -22,7 +22,7 @@
 		 code_change/3, 
 		 terminate/2]).
 
--define(PROCNAME, player).
+-define(PROCNAME, player1).
 
 -record(state, {username, 
                 ticket, 
@@ -37,10 +37,8 @@
 main([NodeName, Username, Password, TournamentManagerNames]) ->
     os:cmd("epmd -daemon"),
     net_kernel:start([list_to_atom(NodeName), shortnames]),
-    io:format( timestamp() ++ ": Initializing The Player " ++ 
-		   atom_to_list( node() ) ++ ".~n" ),
     %% I don't think we need to register players at all?
-    gen_server:start({local, yahtzee_player}, 
+    gen_server:start({local, ?PROCNAME}, ?MODULE, 
 		      {Username, Password, TournamentManagerNames}, []).
 
 
