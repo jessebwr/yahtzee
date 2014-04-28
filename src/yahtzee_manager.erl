@@ -23,7 +23,6 @@
      terminate/2]).
 
 -define(UserInfo, userInfo).
--define(CurrentPlayerTournamentInfo, currentPlayerTournamentInfo).
 -define(CurrentPlayerLoginInfo, currentPlayerLoginInfo).
 -define(TournamentInfo, tournamentInfo).
 -define(TimeOutRefs, timeOutRefs).
@@ -37,32 +36,28 @@
                tournaments_won = 0}).
 
 -record(match, {p1ListOfDice,
-        p2ListOfDice,
-        p1ScoreCard = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
-        p2ScoreCard = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
-        p1,
-        p2,
-        p1RollNum = 0,
-        p2RollNum = 0,
-        p1Win = 0,
-        p2Win = 0,
-        tid,
-        numScorecardsChecked = 0,
-        seed,
-        currentGame,
-        gamesPerMatch
-        }).
+                p2ListOfDice,
+                p1ScoreCard = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
+                p2ScoreCard = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
+                p1,
+                p2,
+                p1RollNum = 1,
+                p2RollNum = 1,
+                p1Win = 0,
+                p2Win = 0,
+                currentGame = 1
+                }).
 
--record(tournament, {dictOfPlayersWithSeeds = ets:new(moo, [bag]),
-           numMatches = 0,
-           status = in_progress,
-           winner = undefined,
-           numPlayersReplied = 0,
-           numNeededReplies,
-           gamesPerMatch,
-           started = false,
-           pidThatRequested
-           }).
+-record(tournament, {bracket = [],
+                     listOfPlayers = [],
+                     status = in_progress,
+                     winner = undefined,
+                     numPlayersReplied = 0,
+                     numNeededReplies,
+                     gamesPerMatch,
+                     started = false,
+                     pidThatRequested
+                     }).
 
 -record(tm, {}). 
 
@@ -100,9 +95,6 @@ init({}) ->
 
   % Just some timeout references
   ets:new(?TimeOutRefs, [set, protected, named_table]),
-
-  % Username : [{Tid, Gid}, {Tid, Gid}, {Tid, Gid}]
-  ets:new(?CurrentPlayerTournamentInfo, [set, protected, named_table]),
 
    % {Tid, Gid} : Match
   ets:new(?MatchTable, [set, protected, named_table]),
@@ -194,6 +186,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
   [{Username, {_Pid, _MonitorRef, TrueLoginTicket}}] = ets:lookup(?CurrentPlayerLoginInfo, Username),
   case LoginTicket == TrueLoginTicket of
     true ->
+      % cancel timer
       [{_, TimeOutRef}] = ets:lookup(?TimeOutRefs, {Username, Tid}),
       ets:delete(?TimeOutRefs, {Username, Tid}),
       timer:cancel(TimeOutRef),
@@ -205,20 +198,22 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
         false ->
 
           % Since they accepted, add them to the dictionary of players
-          TournamentEts = T#tournament.dictOfPlayersWithSeeds,
-          ets:insert(TournamentEts, {Username, 0}), 
+          NewListOfPlayers = T#tournament.listOfPlayers ++ [Username],
 
           % If we have enough players, start the tournament
           NumPlayersReplied = T#tournament.numPlayersReplied + 1,
           case NumPlayersReplied == T#tournament.numNeededReplies of
             true ->
-              NewTM = T#tournament{numPlayersReplied = NumPlayersReplied,
+              NewTM = T#tournament{listOfPlayers = NewListOfPlayers,
+                                   numPlayersReplied = NumPlayersReplied,
                                    started = true},
               ets:insert(?TournamentInfo, {Tid, NewTM}),
               start_tournament(Tid, NewTM),
               {noreply, S};
+
             false ->
-              NewTM = T#tournament{numPlayersReplied = NumPlayersReplied},
+              NewTM = T#tournament{numPlayersReplied = NumPlayersReplied,
+                                   listOfPlayers = NewListOfPlayers},
               ets:insert(?TournamentInfo, {Tid, NewTM}),
               {noreply, S}
           end
@@ -239,10 +234,12 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
   [{Username, {_Pid, _MonitorRef, TrueLoginTicket}}] = ets:lookup(?CurrentPlayerLoginInfo, Username),
   case LoginTicket == TrueLoginTicket of
     true ->
+      %% Cancel the timeout
       [{_, TimeOutRef}] = ets:lookup(?TimeOutRefs, {Username, Tid}),
       ets:delete(?TimeOutRefs, {Username, Tid}),
       timer:cancel(TimeOutRef),
 
+      %% Get the global tournament
       [{Tid, T}] = ets:lookup(?TournamentInfo, Tid),
       case T#tournament.started of
         true ->
@@ -270,38 +267,37 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 
 
+handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScorecardLine} }, S) ->
+  
+
+
 
 %%%%%%%%%%%%%%%%%% END RECEIVING MESSAGES SENT BY PLAYER %%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%% RECIEVING MESSAGES FROM THE OUTSIDE WORLD %%%%%%%%%%%%%%%%%%%
 
-handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S) ->
-  case (NumPlayers rem 2) == 1 of
-    true ->
-      Tid = make_ref(),
+handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S)
+  when (NumPlayers rem 2) == 1 ->
+  Tid = make_ref(),
 
-      % Getting Ets Table Keys i.e. Usernames
-      PlayerList = lists:flatten(ets:match(?CurrentPlayerLoginInfo, {'$1', '_'})),
+  % Getting Ets Table Keys i.e. Usernames
+  PlayerList = lists:flatten(ets:match(?CurrentPlayerLoginInfo, {'$1', '_'})),
 
-      {NumChosenPlayers, ChosenPlayers} = shuffle(PlayerList, NumPlayers),
+  {NumChosenPlayers, ChosenPlayers} = shuffle(PlayerList, NumPlayers),
 
-      NewTournament = #tournament{numNeededReplies = NumChosenPlayers,
-                                   gamesPerMatch = GamesPerMatch,
-                                   pidThatRequested = Pid},
+  NewTournament = #tournament{ numNeededReplies = NumChosenPlayers,
+                               gamesPerMatch = GamesPerMatch,
+                               pidThatRequested = Pid },
 
-      % Ask each of the players
-      lists:foreach(fun(X) -> 
-                        [{X, XInfo}] = ets:lookup(?CurrentPlayerLoginInfo, X),
-                        handle_ask_player(X, XInfo, Tid) 
-                  end, ChosenPlayers),
+  % Ask each of the players
+  lists:foreach(fun(X) -> 
+                    [{X, XInfo}] = ets:lookup(?CurrentPlayerLoginInfo, X),
+                    handle_ask_player(X, XInfo, Tid) 
+              end, ChosenPlayers),
 
-      % inserting the tournament info
-      ets:insert(?TournamentInfo, {Tid, NewTournament}),
-      {noreply, S};
-
-    false ->
-      {noreply, S}
-  end;
+  % inserting the tournament info
+  ets:insert(?TournamentInfo, {Tid, NewTournament}),
+  {noreply, S};
 
 
 handle_info({tournament_info, Pid, Tid}, S) ->
@@ -334,9 +330,12 @@ handle_info({user_info, Pid, Username}, S) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%% Handling Players Dying %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-handle_info({'DOWN', MonitorRef,_,PlayerId,_}, S) ->
+handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
   demonitor(MonitorRef, [flush]),
-
+  % Look up the username by pattern matching on the record stored in the 
+  % ets table CurrentPlayerLoginInfo.
+  Username = hd( ets:match( ?CurrentPlayerLoginInfo, {'$1', {Pid, '_', '_'} } ) ),
+  handle_gone( Username ).
 
 
 handle_info(MSG, S) ->
@@ -344,72 +343,78 @@ handle_info(MSG, S) ->
   {noreply, S}.
 
 handle_gone(Username) ->
-  [{Username, Games}] = ets:lookup(?CurrentPlayerTournamentInfo, Username),
-  lists:foreach(fun(Game) -> handle_gone_game(Game, Games, Username) end, Games).
+  UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
+  UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
+  lists:foreach(fun( [Tid, Gid] ) -> handle_gone_game(Tid, Gid, Username, 1) end, UserMatchesP1),
+  lists:foreach(fun( [Tid, Gid] ) -> handle_gone_game(Tid, Gid, Username, 2) end, UserMatchesP2).
 
 
 
-handle_gone_game(Game, Games, Username) ->
-  {Tid, _Gid} = Game,
-  [{Game, M}] = ets:lookup(?MatchTable, Game),
-  ets:delete(?MatchTable, Game),
+handle_gone_game(Tid, Gid, Username, 1) ->
+  [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
+  ets:delete(?MatchTable, {Tid, Gid} ),
 
   P1 = M#match.p1,
   P2 = M#match.p2,
   NewCurrentGame = M#match.currentGame + 1,
   GamesPerMatch = M#match.gamesPerMatch,
   P1Win = M#match.p1Win,
-  P2Win = M#match.p2Win,
-  Seed = M#match.seed,
+  P2Win = M#match.p2Win + 1,
 
-  [{Tid, T}] = ets:lookup(?TournamentInfo, Tid),
-  [{Username, PrevUserData}] = ets:lookup(?UserInfo, Username),
-
-  case NewCurrentGame == GamesPerMatch of
+  case P2Win > (GamesPerMatch / 2) of
     true ->
+      % [{Tid, T}] = ets:lookup(?TournamentInfo, Tid),
+      % [{Username, PrevUserData}] = ets:lookup(?UserInfo, Username),
+      % %% Update that you lost the tournament and the match
 
-      %% Update that you lost the tournament and the match
-      PrevTournamentsPlayed = PrevUserData#user.tournaments_played,
-      NewUserData = PrevUserData#user{match_losses = PrevMatchLosses + 1,
-                                      tournaments_played = PrevTournamentsPlayed + 1},
-      ets:insert(?UserInfo, {Username, NewUserData}),
+      % PrevTournamentsPlayed = PrevUserData#user.tournaments_played,
+      % NewUserData = PrevUserData#user{match_losses = PrevMatchLosses + 1,
+      %                                 tournaments_played = PrevTournamentsPlayed + 1},
+      % ets:insert(?UserInfo, {Username, NewUserData}),
 
-      %% There is one less match going on in the tournament
-      ets:insert(?TournamentInfo, T#tournament{numMatches = T#tournament.numMatches - 1}),
-
-      %% You lost the match, and thus are out of the tournament
-      %% Thus, you are playing one less game.
-      ets:insert(?CurrentPlayerTournamentInfo, {Username, Games -- Game}),
-
-      %% Now put the winning player back in the list of players with seeds for
-      %% the tournament to match them up
-      EtsOfPlayersWithSeeds = T#tournament.dictOfPlayersWithSeeds,
-      case Username == P1 of
-        true ->
-          ets:insert(EtsOfPlayersWithSeeds, {P2, Seed + 1});
-          % Make match for p2...
-
-        false ->
-          ets:insert(EtsOfPlayersWithSeeds, {P1, Seed + 1})
-          % make match for p1...
-      end;
+      handle_match_over(Tid, P2, P1);
 
     false ->
       %% Just make them lose the game
-      NewGid = make_ref()
-      case Username == P1 of
-        true ->
-          NewMatch = M#match{currentGame = NewCurrentGame,
-                             p2Win = P2Win + 1},
-          ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
-          try_to_make_match(Tid, T, P2);
+      NewGid = make_ref(),
+      NewMatch = #match{p1 = P1,
+                        p2 = P2,
+                        currentGame = NewCurrentGame,
+                        p2Win = P2Win,
+                        p1Win = P1Win},
 
-        false ->
-          NewMatch = M#match{currentGame = NewCurrentGame,
-                             p1Win = P1Win + 1},
-          ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
-          try_to_make_match(Tid, T, P1);
-      end
+      ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
+      {ok, TimerRef} = timer:send_after(60000, {Tid, NewGid, P2, P1}),
+      ets:insert(?TimeOutRefs, {P1, TimerRef})
+  end;
+
+handle_gone_game(Tid, Gid, Username, 2) ->
+  [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
+  ets:delete(?MatchTable, {Tid, Gid} ),
+
+  P1 = M#match.p1,
+  P2 = M#match.p2,
+  NewCurrentGame = M#match.currentGame + 1,
+  GamesPerMatch = M#match.gamesPerMatch,
+  P1Win = M#match.p1Win + 1,
+  P2Win = M#match.p2Win,
+
+  case P1Win > (GamesPerMatch / 2) of
+    true ->
+      handle_match_over(Tid, P1, P2);
+
+    false ->
+      %% Just make them lose the game
+      NewGid = make_ref(),
+      NewMatch = #match{p1 = P1,
+                        p2 = P2,
+                        currentGame = NewCurrentGame,
+                        p2Win = P2Win,
+                        p1Win = P1Win},
+
+      ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
+      {ok, TimerRef} = timer:send_after(60000, {Tid, NewGid, P2, P1}),
+      ets:insert(?TimeOutRefs, {P2, TimerRef})
   end.
 
 
@@ -418,9 +423,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, _State) ->
     io:format(utils:timestamp() ++ ": terminate reason: ~p~n", [_Reason]).
-
-
-
 
 
 
@@ -446,154 +448,75 @@ shuffle(List, K) ->
 %%%%%%%% Starting up a tournament %%%%%%%%%%%%%%% 
 
 start_tournament(Tid, T) ->
-  EtsOfPlayersWithSeeds = T#tournament.dictOfPlayersWithSeeds,
-  NumPlayers = ets:info(EtsOfPlayersWithSeeds, size),
-  case NumPlayers == 0 of
-    true ->
-      ets:insert(?TournamentInfo, {Tid, T#tournament{status = complete}}),
-      ets:delete(EtsOfPlayersWithSeeds);
-    false ->  
-      case NumPlayers == 1 of
-        true ->
-          Winner = ets:first(EtsOfPlayersWithSeeds),
-          ets:delete(EtsOfPlayersWithSeeds),
-          ets:insert(?TournamentInfo, {Tid, T#tournament{status = complete,
-                                                         winner = Winner}}),
-          [{Winner, UserData}] = ets:lookup(?UserInfo, Winner),
-          TournamentWins = UserData#user.tournaments_won + 1,
-          TournamentsPlayed = UserData#user.tournaments_played + 1,
-          NewUserData = UserData#user{tournaments_played = TournamentsPlayed,
-                                      tournaments_won = TournamentWins},
-
-          ets:insert(?UserInfo, {Winner, NewUserData});
-
-        false ->
-          NumByesNeeded = utils:nextPow2(NumPlayers) - NumPlayers,
-          PlayerList = lists:flatten(ets:match(EtsOfPlayersWithSeeds, {'$1', 0})),
-          % Inserting Extra Byes Players
-          ByesList = lists:duplicate(NumByesNeeded, bye),
-          lists:foreach(fun(_Bye) -> ets:insert(EtsOfPlayersWithSeeds, {bye, 0}) end, ByesList),
-
-          make_initial_matches_loop(Tid, T),
-          T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, PlayerList, blah}}
-      end
-  end.
+  ListOfPlayers = T#tournament.listofPlayers,
+  NumPlayers = length( ListOfPlayers ),
+  NumByesNeeded = utils:nextPow2(NumPlayers) - NumPlayers,
+  RoundOne = create_initial_bracket( ListOfPlayers, [], NumByesNeeded ),
+  Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
+  create_matches( Bracket ),  % Create first round matches and advance players whose
+                              % opponent is 'bye'
+  create_matches( tl(Bracket) ),  % Create second round matches
+  Matches = ets:matches( ?MatchTable, { {Tid, '$1'}, $2 } ),
+  NewT = T#tournament{ started = true,
+                       bracket = Bracket },
+  start_matches( Tid, Matches ),
+  T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, PlayerList, blah}}.
 
 
-make_initial_matches_loop(Tid, T) ->
-  EtsOfPlayersWithSeeds = T#tournament.dictOfPlayersWithSeeds,
-  case ets:info(EtsOfPlayersWithSeeds, size) == 0 of
-    true ->
-      ok;
-    false ->
-      Player1 = ets:first(EtsOfPlayersWithSeeds),
-      ets:delete(EtsOfPlayersWithSeeds, Player1),
-      Player2 = ets:last(EtsOfPlayersWithSeeds),
-      ets:delete(EtsOfPlayersWithSeeds, Player2),
-      make_single_match(Tid, T, Player1, Player2, 0),
-      make_initial_matches_loop(Tid, T)
-  end.
+
+create_initial_bracket( [], BracketSoFar, _NumByesNeeded ) ->
+  BracketSoFar;
+
+create_initial_bracket( [NextPlayer | RestPlayers], BracketSoFar, 0 ) ->
+  create_initial_bracket( RestPlayers, [NextPlayer | BracketSoFar], 0 );
+
+create_initial_bracket( Players, BracketSoFar, NumByesNeeded )
+  when length( BracketSoFar ) rem 2 == 1 ->
+  create_initial_bracket( Players, [bye | BracketSoFar], NumByesNeeded - 1 );
+
+create_initial_bracket( [NextPlayer | RestPlayers], BracketSoFar, NumByesNeeded )
+  when length( BracketSoFar ) rem 2 == 0 ->
+  create_initial_bracket( RestPlayers, [NextPlayer | BracketSoFar], NumByesNeeded ).
 
 
-%%%%%%%%%%%%%%%% Making and Handling Matches %%%%%%%%%%%%%%%%%%%%%
 
-try_to_make_match(Tid, T, Player) ->
-  % Find someone with your same seed... If there are no matches
-  % and no one with your seed then you are the winner.
-  EtsOfPlayersWithSeeds = T#tournament.dictOfPlayersWithSeeds,
-  NumMatches = T#tournament.numMatches,
-  [{Player, Seed}] = ets:lookup(EtsOfPlayersWithSeeds, Player),
-  case (ets:info(EtsOfPlayersWithSeeds, size) == 1) and (NumMatches == 0) of
-    true ->
-      NewT = T#tournament{status = complete,
-                          winner = Player},
-      ets:insert(?TournamentInfo, {Tid, NewT});
-    else ->
-      PlayersWithSameSeed = lists:flatten(ets:match(EtsOfPlayersWithSeeds, {'$1', Seed})) -- {Player, Seed},
-      case PlayersWithSameSeed of
-        [] -> 
-          ok;
-        [Player2 | _Rest] ->
-          make_single_match(Tid, T, Player, Player2, Seed)
-      end
-  end.
+initialize_later_rounds( Bracket, LaterRounds, NumRounds, NumRounds ) ->
+  [ Bracket | LaterRounds ];
+
+initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds ) 
+  when CurrentRoundSize < MaxRounds ->
+  NextRound = lists:duplicate( math:pow(2, CurrentRoundSize), none ),
+  initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
 
-% -record(tournament, {dictOfPlayersWithSeeds = ets:new(moo, [bag]),
-%            numMatches = 0,
-%            status = in_progress,
-%            winner = undefined,
-%            numPlayersReplied = 0,
-%            numNeededReplies,
-%            gamesPerMatch,
-%            started = false,
-%            pidThatRequested
-%            }).
+create_matches( [ [] | _Rest ], _CurrMatchInd, _Tid ) ->
+  ok;
 
-make_single_match(Tid, T, InitPlayer1, InitPlayer2, Seed) ->
-  EtsOfPlayersWithSeeds = T#tournament.dictOfPlayersWithSeeds,
-  % This makes sure that if there is at least one bye, it will
-  % be Player1, because atoms are always before strings.
-  [Player1, Player2] = lists:sort([InitPlayer1, InitPlayer2]),
-  ets:insert(?TournamentInfo, T#tournament{numMatches = T#tournament.numMatches + 1}),
+create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
+  CurrMatchInd, Tid ) ->
+  NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
+  create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid );
 
-  ets:delete(EtsOfPlayersWithSeeds, Player1),
-  ets:delete(EtsOfPlayersWithSeeds, Player2),
-
-  case Player1 == bye of
-    % If we are fighting a bye, then just increase our seed.
-    % No need to create a match
-    true -> 
-      EtsOfPlayersWithSeeds = T#tournament.dictOfPlayersWithSeeds,
-      [{Tid, T}] = ets:lookup(?TournamentInfo, Tid),
-      ets:insert(EtsOfPlayersWithSeeds, {Player2, Seed + 1});
-      % Try to create another match... (TODO)
+create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ], Tid ) ->
+  GameRef = make_ref(),
+  ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
+                                                   p2 = SecondPlayer,
+                                                   }} ),
+  create_matches( [RestPlayers, RoundTwo | RestRounds], Tid ).
 
 
-    % Create a match and send the initial dice
-    false ->
-      GamesPerMatch = T#tournament.gamesPerMatch,
-      Dice = generateDice(),
-      Match = #match{p1ListOfDice = Dice,
-                     p2ListOfDice = Dice,
-                     p1 = Player1,
-                     p2 = Player2,
-                     tid = Tid,
-                     seed = Seed,
-                     currentGame = 0,
-                     gamesPerMatch = GamesPerMatch},
-      Gid = make_ref(),
-      [{Player1, Games1}] = ets:lookup(?CurrentPlayerTournamentInfo, Player1),
-      ets:insert(?CurrentPlayerTournamentInfo, {Player1, Games1 ++ [{Tid, Gid}]}),
 
-      [{Player2, Games2}] = ets:lookup(?CurrentPlayerTournamentInfo, Player1),
-      ets:insert(?CurrentPlayerTournamentInfo, {Player2, Games2 ++ [{Tid, Gid}]}),
+start_matches( Tid, [] ) ->
+  ok;
 
-      sendDice(Tid, Gid, Match, 5, 5)
-  end.
-
-
-make_single_match(Tid, T, Player1, Player2, Seed, identical) ->
-  ets:insert(?TournamentInfo, T#tournament{numMatches = T#tournament.numMatches + 1}),
-  Dice1 = generateDice(),
-  Dice2 = generateDice(),
-  GamesPerMatch = T#tournament.gamesPerMatch,
-  Match = #match{p1ListOfDice = Dice1,
-                 p2ListOfDice = Dice2,
-                 p1 = Player1,
-                 p2 = Player2,
-                 tid = Tid,
-                 seed = Seed,
-                 currentGame = 0,
-                 gamesPerMatch = GamesPerMatch},
-  Gid = make_ref(),
-  [{Player1, Games1}] = ets:lookup(?CurrentPlayerTournamentInfo, Player1),
-  ets:insert(?CurrentPlayerTournamentInfo, {Player1, Games1 ++ [{Tid, Gid}]}),
-
-  [{Player2, Games2}] = ets:lookup(?CurrentPlayerTournamentInfo, Player1),
-  ets:insert(?CurrentPlayerTournamentInfo, {Player2, Games2 ++ [{Tid, Gid}]}),
-
-  sendDice(Tid, Gid, Match, 5, 5).
+start_matches( Tid, [ [Gid, NextMatch] | RestMatches ] ) ->
+  Dice = generateDice(),
+  NewMatch = NextMatch#match{ p1ListOfDice = Dice,
+                              p2ListOfDice = Dice },
+  ets:insert( ?MatchTable, {{Tid, Gid}, NewMatch} ),
+  sendDice( Tid, Gid, NextMatch, 5, 5 ),
+  start_matches( Tid, RestMatches ).
+  
 
 
 sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
@@ -617,8 +540,12 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
                                                p1ListOfDice = P1NewBackups,
                                                p2ListOfDice = P2NewBackups}}),
 
+  %{KEY, VALUE}
   Pid1 ! {play_request, self(), P1, P1Msg},
   Pid2 ! {play_request, self(), P2, P2Msg}.
+
+
+
 
 
 handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
@@ -626,8 +553,6 @@ handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
   {ok, TimerRef} = timer:send_after(60000, {reject_tournament, Pid, ChosenPlayer, {Tid, LoginTicket}}),
   ets:insert(?TimeOutRefs, {{ChosenPlayer, Tid}, TimerRef}),
   ok.
-
-
 
 
 
