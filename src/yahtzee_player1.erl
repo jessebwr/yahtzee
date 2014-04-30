@@ -26,7 +26,7 @@
 -define(MANAGER_NAME, yahtzee_manager).
 
 -record(state, {username, 
-                ticket, 
+                ticketDict, %% Dictionary with manager PID as key and login ticket as value
                 activeTournaments, 
                 numPendingTournaments}).
 
@@ -75,8 +75,11 @@ handle_cast(_, S) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%% OUTSIDE ASYNCHRONOUS MESSAGES %%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% @spec handle_info({logged_in, Pid, LoginTicket}, State) -> none()
+%% @doc Message received from the system telling the player it has successfully
+%% registers with the tournament manager
 handle_info({logged_in, Pid, LoginTicket}, State) ->
-    
+    State#state.ticketDict = dict:append(Pid, LoginTicket, State.state.ticketDict).
 
 %%%%%%%%%%%%%%%%%%%%%% END OUTSIDE ASYNCHRONOUS MESSAGES %%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
