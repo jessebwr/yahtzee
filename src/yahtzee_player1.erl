@@ -62,9 +62,7 @@ main([NodeName, Username, Password, TournamentManagerNames]) ->
 init({Username, Password, TournamentManagerNames}) ->
   login_to_managers(TournamentManagerNames, Username, Password),
   {ok, #state{username = Username,
-                ticketDict = dict:new(),
-                activeTournaments = dict:new(),
-                numPendingTournaments = []}}.
+                ticketDict = dict:new()}}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -95,52 +93,64 @@ handle_info({logged_in, Pid, _Username, LoginTicket}, State) ->
 %% @spec handle_info({start_tournament, Pid, _Username, LoginTicket}, State) -> none()
 %% @doc Message received from the system asking the player if it would like to enter
 %%      a tournament
-handle_info({start_tournament, Pid, _Username, Tid}, State) ->
+handle_info({start_tournament, Pid, Username, Tid}, State) ->
   io:format(timestamp() ++ ": received start_tournament message from Pid: ~p~n",
                                 [Pid]),
-  case ?AUTOMATIC_START of
-    true ->
-      io:format(timestamp() ++ ": accepting request to start a tournament~n"),
-      NewState = dict:append(Tid,
-                      #tournament{}, State#state.activeTournaments),
-      Pid ! {accept_tournament, self(), State#state.username, {Tid, 
-                                          dict:fetch(Pid, State#state.ticketDict)}},
-      {noreply, NewState};
-    false ->
-      PlayerResponse = io:get_line("Would you like to enter a tournment? (y/n): "),
-      case PlayerResponse of
-        "y\n" ->
-          io:format(timestamp() ++ ": accepting request to start a tournament~n"),
-          NewState = dict:append(Tid,
-                                      #tournament{}, State#state.activeTournaments),
-          Pid ! {accept_tournament, self(), State#state.username, {Tid, 
-                                      dict:fetch(Pid, State#state.ticketDict)}},
-          {noreply, NewState};
-        "n\n" ->
-          io:format(timestamp() ++ ": rejecting request to start a tournament~n"),
-          Pid ! {reject_tournament, self(), State#state.username, {Tid, 
-                                        dict:fetch(Pid, State#state.ticketDict)}},
-          {noreply, State};
+  TrueUsername = State#state.username,
+  case Username of
+    TrueUsername ->
+      case ?AUTOMATIC_START of
         true ->
-          io:format(timestamp() ++ ": input error! User needs to enter either 'y' or 'n'."
-                                ++ " Please try again~n"),
-          handle_info({start_tournament, Pid, _Username, Tid}, State)
-      end
-  end.
+          io:format(timestamp() ++ ": accepting request to start a tournament~n"),
+          Pid ! {accept_tournament, self(), State#state.username, {Tid, 
+                                              dict:fetch(Pid, State#state.ticketDict)}},
+          {noreply, State};
+        false ->
+          PlayerResponse = io:get_line("Would you like to enter a tournment? (y/n): "),
+          case PlayerResponse of
+            "y\n" ->
+              io:format(timestamp() ++ ": accepting request to start a tournament~n"),
+              Pid ! {accept_tournament, self(), State#state.username, {Tid, 
+                                          dict:fetch(Pid, State#state.ticketDict)}},
+              {noreply, State};
+            "n\n" ->
+              io:format(timestamp() ++ ": rejecting request to start a tournament~n"),
+              Pid ! {reject_tournament, self(), State#state.username, {Tid, 
+                                            dict:fetch(Pid, State#state.ticketDict)}},
+              {noreply, State};
+            true ->
+              io:format(timestamp() ++ ": input error! User needs to enter either 'y' or 'n'."
+                                    ++ " Please try again~n"),
+              handle_info({start_tournament, Pid, Username, Tid}, State)
+          end
+      end;
+    true ->
+      io:format(timestamp() ++ ": incorrect username received from tournament manager with pid ~p! 
+                                        Trickery is afoot~n", [Pid]),
+      {noreply, State}
+  end;
 
 %% @spec handle_info({play_request, Pid, _Username, {Ref, Tid, Gid, RollNumber, Dice,
 %%                        Scorecard, OpponentsScorecard}}, State) -> {noreply, State}
 %% @doc Message received from the rest of the system asking the player to make a play,
 %% based on which roll number this play is, the dice, and both player's scorecards
-handle_info({play_request, Pid, _Username, {Ref, Tid, Gid, RollNumber, Dice,
+handle_info({play_request, Pid, Username, {Ref, Tid, Gid, RollNumber, Dice,
                         Scorecard, OpponentsScorecard}}, State) ->
   io:format(timestamp() ++ ": received a request to play from pid; ~p
-                    with Tid: ~p and Gid: ~p~n", [Pid, Tid, Gid]),
+                        with Tid: ~p and Gid: ~p~n", [Pid, Tid, Gid]),
   io:format(timestamp() ++ ": it is roll number ~p and the dice are ~p~n", [RollNumber, Dice]),
-  {DiceToKeep, ScorecardLine} = playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard),
-  Pid ! {play_action, self(), State#state.username, {Ref, Tid, Gid, RollNumber,
-                                                    DiceToKeep, ScorecardLine}},
-  {noreply, State}.
+  TrueUsername = State#state.username,
+  case Username of
+    TrueUsername ->
+      {DiceToKeep, ScorecardLine} = playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard),
+      Pid ! {play_action, self(), State#state.username, {Ref, Tid, Gid, RollNumber,
+                                                        DiceToKeep, ScorecardLine}},
+      {noreply, State};
+    true ->
+      io:format(timestamp() ++ ": incorrect username received from tournament manager with pid ~p! 
+                                        Trickery is afoot~n", [Pid]),
+      {noreply, State}
+  end.
 
 
 
@@ -163,6 +173,13 @@ terminate(_Reason, _State) ->
 
 
 
+
+%%%============================================================================
+%%% PLAYER AI FUNCTIONS
+%%%============================================================================
+
+playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) ->
+    
 
 
 %%%============================================================================
