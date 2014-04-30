@@ -23,6 +23,7 @@
 		 terminate/2]).
 
 -define(PROCNAME, player1).
+-define(MANAGER_NAME, yahtzee_manager).
 
 -record(state, {username, 
                 ticket, 
@@ -52,7 +53,8 @@ main([NodeName, Username, Password, TournamentManagerNames]) ->
 %%%============================================================================
 
 %% @spec init({NodesToConnectTo}) -> {ok, State}.
-init({Username, _Password, _TournamentManagerNames}) ->
+init({Username, Password, TournamentManagerNames}) ->
+    login_to_managers(TournamentManagerNames, Username, Password),
     {ok, #state{username = Username}}.
 
 
@@ -73,8 +75,8 @@ handle_cast(_, S) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%% OUTSIDE ASYNCHRONOUS MESSAGES %%%%%%%%%%%%%%%%%%%%%%%%%
 
-handle_info(_, S) ->
-    {noreply, S}.
+handle_info(_, State) ->
+    {noreply, State}.
 
 %%%%%%%%%%%%%%%%%%%%%% END OUTSIDE ASYNCHRONOUS MESSAGES %%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -94,6 +96,19 @@ terminate(_Reason, _State) ->
 %%%============================================================================
 
 
+
+%% @spec login_to_managers(List::TournamentManagerNames, string()::Username), string()::Password -> ok
+%% @doc Sends a message to all of the nodes in the list of tournament managers asking
+%% them each to register the player with the given username and password
+login_to_managers([], _, _) -> ok;
+login_to_managers(TournamentManagerNames, Username, Password) ->
+    io:format(timestamp() ++ ": sending login message to node with name '~p~n",
+     [hd(TournamentManagerNames)]),
+    {?MANAGER_NAME, hd(TournamentManagerNames)} ! {login, self(), Username, {Username, Password}},
+    login_to_managers(tl(TournamentManagerNames), Username, Password).
+
+
+    
 
 %% @spec timestamp() -> string()
 %% @doc Generates a fancy looking timestamp, found on:
