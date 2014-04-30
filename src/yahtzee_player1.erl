@@ -7,6 +7,50 @@
 %%% @end
 %%%--------------------------------------------------------------------
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%% Scorecard Layout %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% The patterns on the scorecard, and their scoring rules, are shown in the 
+% following table. a and b denote distinct values shown on dice (e.g., the
+% sequence a,a,a,b,b means three dice with value a and two dice with value
+% b ≠ a). x, y and z denote values shown on dice that may not be distinct
+% (e.g., the sequence x, x, x, y, z means at least three, but possibly four
+% or five, dice with value x).
+
+
+
+
+
+%_________________________________________________________________________ |
+%                             UPPER SECTION                                |
+%_________________________________________________________________________ |
+%|PATTERN                   | CONDITION         | SCORE CALCULATION        |
+%|__________________________|___________________|_________________________ |
+%| Aces                     | none              | total value of all ones  |
+%| Twoes                    | none              | total value of all twoes |
+%| Threes                   | none              | total value of all threes|
+%| Fours                    | none              | total value of all fours |
+%| Fives                    | none              | total value of all fives |
+%| Sixes                    | none              | total value of all sixes |
+%_________________________________________________________________________ |
+%                             LOWER SECTION                                |
+%_________________________________________________________________________ |
+%|PATTERN                   | CONDITION         | SCORE CALCULATION        |
+%|__________________________|___________________|_________________________ |
+%| Three of a kind          | x, x, x, y, z     | total value of all dice  |
+%| Four of a kind           | x, x, x, x, z     | total value of all dice  |
+%| Full House               | a, a, a, b, b     | total value of all dice  |
+%| Small Straight           | x,x+1,x+2,x+3,y   | 25                       |
+%| Large Straight           | x,x+1,x+2,x+3,x+4 | 30                       |
+%| Yahtzee                  | x, x, x, x, x     | 40                       |
+%| Chance                   | none              | total value of all dice  |
+%_________________________________________________________________________ |
+
+
+
+
+
 -module(yahtzee_player1).
 -behavior(gen_server).
 
