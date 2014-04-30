@@ -68,10 +68,17 @@
 
 -define(PROCNAME, player1).
 -define(MANAGER_NAME, yahtzee_manager).
--define(AUTOMATIC_START, true).
+-define(AUTOMATIC_START, true). %% When true, a player will not ask for command-line
+%%                              input on whether it should accept a tournament request
 
 -record(state, {username, 
-                ticketDict}). %% Dictionary with manager PID as key and login ticket as value
+                tournamentDict, %% Dictionary with manager PID as key and 
+                                %% a value of a tuple of the form  {LoginTicket, Loggedin},
+                                %% where LoginTicket is the login ticket received
+                                %% from a logged_in message, and LoggedIn is a
+                                %% boolean describing whether the player is logged
+                                %% in to the tournament with the key as a Pidlogin
+                loggedIn}). 
                 %%activeTournaments}). %% Dict of active tournament records
 
 %% Note: tournament records are meant to be stored in a dictionary with tid as the key
@@ -106,7 +113,8 @@ main([NodeName, Username, Password, TournamentManagerNames]) ->
 init({Username, Password, TournamentManagerNames}) ->
   login_to_managers(TournamentManagerNames, Username, Password),
   {ok, #state{username = Username,
-                ticketDict = dict:new()}}.
+              tournamentDict = dict:new(),
+              loggedIn = true}}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -132,7 +140,20 @@ handle_cast(_, S) ->
 %%      registered with the tournament manager
 handle_info({logged_in, Pid, _Username, LoginTicket}, State) ->
   io:format(timestamp() ++ ": received logged_in message from Pid: ~p~n", [Pid]),
-  {noreply, dict:append(Pid, LoginTicket, State#state.ticketDict)};
+  NewDict = dict:store(Pid, {LoginTicket, true}, State#state.tournamentDict),
+  {noreply, State#state{tournamentDict = NewDict}};
+
+%% @spec handle_info(logout, State) -> {noreply, State}
+%% @doc Message callback when a user calls the logout helper function.
+%%      The player then updates its state record and sends a logout message
+%%      to the tournament
+handle_info({logout, TournamentPid}, State) ->
+  {LoginTicket, _} = dict:fetch(TournamentPid, State#state.tournamentDict),
+  io:format(timestamp() ++ ": send logout message to tournament manager with PID ~p~n",
+                              [TournamentPid]),
+  TournamentPid ! {logout, self(), State#state.username, LoginTicket},
+  NewDict = dict:store(TournamentPid, {LoginTicket, false}, State#state.tournamentDict),
+  {noreply, State#state{tournamentDict = NewDict}};
 
 %% @spec handle_info({start_tournament, Pid, _Username, LoginTicket}, State) -> none()
 %% @doc Message received from the system asking the player if it would like to enter
@@ -146,21 +167,24 @@ handle_info({start_tournament, Pid, Username, Tid}, State) ->
       case ?AUTOMATIC_START of
         true ->
           io:format(timestamp() ++ ": accepting request to start a tournament~n"),
+          {LoginTicket, _} = dict:fetch(Pid, State#state.tournamentDict),
           Pid ! {accept_tournament, self(), State#state.username, {Tid, 
-                                              dict:fetch(Pid, State#state.ticketDict)}},
+                                              LoginTicket}},
           {noreply, State};
         false ->
           PlayerResponse = io:get_line("Would you like to enter a tournment? (y/n): "),
           case PlayerResponse of
             "y\n" ->
               io:format(timestamp() ++ ": accepting request to start a tournament~n"),
+              {LoginTicket, _} = dict:fetch(Pid, State#state.tournamentDict),
               Pid ! {accept_tournament, self(), State#state.username, {Tid, 
-                                          dict:fetch(Pid, State#state.ticketDict)}},
+                                          LoginTicket}},
               {noreply, State};
             "n\n" ->
               io:format(timestamp() ++ ": rejecting request to start a tournament~n"),
+              {LoginTicket, _} = dict:fetch(Pid, State#state.tournamentDict),
               Pid ! {reject_tournament, self(), State#state.username, {Tid, 
-                                            dict:fetch(Pid, State#state.ticketDict)}},
+                                            LoginTicket}},
               {noreply, State};
             true ->
               io:format(timestamp() ++ ": input error! User needs to enter either 'y' or 'n'."
@@ -233,6 +257,13 @@ playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) ->
 %%%============================================================================
 
 
+%% @spec logout(TournamentPid) -> none()
+%% @doc Preferred method to call for a player to log out from the 
+%% tournament with the inputted Pid, so the state record can be
+%% updated correctly. A player sends a message to itself so in
+%% handle_info it can access the state record
+logout(TournamentPid) ->
+  self() ! {logout, TournamentPid}.
 
 %% @spec login_to_managers(List::TournamentManagerNames, string()::Username), string()::Password -> ok
 %% @doc Sends a message to all of the nodes in the list of tournament managers asking
