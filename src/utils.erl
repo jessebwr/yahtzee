@@ -4,6 +4,9 @@
          is_pow2/1,
          timestamp/0]).
 
+%% @spec nextPow2(X) -> integer()
+%% @doc Finds the next power of 2 that is greater than X,
+%%  or returns X if X is already a power of 2
 nextPow2(X) when is_integer(X) ->
   A = round(math:pow(2, round(math:log(X)/math:log(2)))),
   case A < X of
@@ -20,7 +23,7 @@ log2(X) when is_integer(X) ->
 is_pow2(X) when is_integer(X) ->
     ( (X > 0) and  ((X band (X - 1)) == 0) ).
 
-%% @spec timestamp(Now) -> string()
+%% @spec timestamp() -> string()
 %% @doc Generates a fancy looking timestamp, found on:
 %%    http://erlang.2086793.n4.nabble.com/formatting-timestamps-td3594191.html
 timestamp() -> 
