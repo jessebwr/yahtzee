@@ -222,7 +222,9 @@ terminate(_Reason, _State) ->
 %%% PLAYER AI FUNCTIONS
 %%%============================================================================
 
+%% REALLY SILLY AI IMPLEMENTATION, MAKE THIS BETTER!
 playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) ->
+  {[true, true, true, true, true], 1}.
     
 
 
