@@ -424,7 +424,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%% RECIEVING MESSAGES FROM THE OUTSIDE WORLD %%%%%%%%%%%%%%%
 
-handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S) when (NumPlayers rem 2) == 1 ->
+handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S) when (GamesPerMatch rem 2) == 1 ->
     io:format(utils:timestamp() ++ ": received request_tournament message from ~p
                                     for a tournament with ~p players and ~p games~n",
                                      [Pid, NumPlayers, GamesPerMatch]),
@@ -667,15 +667,29 @@ create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
-    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne);
+    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, [bye, SecondPlayer | RoundOne]);
 
 create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
 						     p2 = SecondPlayer}}),
-    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne).
+    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, [FirstPlayer, SecondPlayer | RoundOne]).
 
+
+create_single_round_match( Bracket = [[bye, _PlayerTwo]], Tid ) ->
+    Bracket;
+
+create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
+    Bracket;
+
+create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
+    GameRef = make_ref(),
+    ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = PlayerOne,
+						     p2 = PlayerTwo }}).
+    
+    
+    
 
 
 start_matches( _, [] ) ->
