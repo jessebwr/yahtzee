@@ -12,7 +12,8 @@
 -behavior(gen_server).
 
 %% External exports
--export([main/1]).
+-export([main/1,
+        shuffle/2]).
 
 %% gen_server callbacks
 -export([init/1, 
@@ -66,12 +67,12 @@
 %%% API
 %%%============================================================================
 
-main([StrNodeName]) ->
+main(StrNodeName) ->
     NodeName = list_to_atom(StrNodeName),
     os:cmd("epmd -daemon"),
     net_kernel:start([NodeName, shortnames]),
     io:format(utils:timestamp() ++ ": starting network kernel with node name ~p~n", [NodeName]),
-    gen_server:start({local, NodeName}, yahtzee_manager, {}, []).
+    gen_server:start({local, ?MODULE}, ?MODULE, {}, []).
 
 
 
@@ -440,7 +441,7 @@ handle_info({user_info, Pid, Username}, S) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%% Handling Players Dying %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
+handle_info({'DOWN', MonitorRef,_,Pid,_}, _) ->
     demonitor(MonitorRef, [flush]),
     %% Look up the username by pattern matching on the record stored in the 
     %% ets table CurrentPlayerLoginInfo.
@@ -461,7 +462,7 @@ handle_gone(Username) ->
     lists:foreach(fun( [Tid, Gid] ) -> handle_gone_game(Tid, Gid, Username, 2) end, UserMatchesP2).
 
 
-handle_gone_game(Tid, Gid, Username, 1) ->
+handle_gone_game(Tid, Gid, _Username, 1) ->
     [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
     ets:delete(?MatchTable, {Tid, Gid} ),
     [{_, T}] = ets:lookup(?TournamentInfo, Tid),
@@ -491,7 +492,7 @@ handle_gone_game(Tid, Gid, Username, 1) ->
     	    ets:insert(?TimeOutRefs, {P1, TimerRef})
     end;
 
-handle_gone_game(Tid, Gid, Username, 2) ->
+handle_gone_game(Tid, Gid, _Username, 2) ->
     [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
     ets:delete(?MatchTable, {Tid, Gid} ),
     [{_, T}] = ets:lookup(?TournamentInfo, Tid),
@@ -539,7 +540,12 @@ terminate(Reason, _State) ->
 
 
 
-
+%% @spec shuffle(List, K) -> {Num, Chosen}
+%% @doc Given a list List and an integer K, return a tuple
+%% whose second value is a list Chosen with the shuffled values of
+%% those in the original list, and the length Num of this list which is
+%% K if Num <= the size of the original list, or else the size of the
+%% original list
 shuffle(List, K) ->
     {A, B, C} = now(),
     random:seed(A,B,C),
@@ -621,7 +627,7 @@ create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRoun
 
 
 
-start_matches( Tid, [] ) ->
+start_matches( _, [] ) ->
     ok;
 
 start_matches( Tid, [ [Gid, NextMatch] | RestMatches ] ) ->

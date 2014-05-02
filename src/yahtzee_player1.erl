@@ -92,12 +92,16 @@
 %%% API
 %%%============================================================================
 
-main([NodeName, Username, Password, TournamentManagerNames]) ->
+main(Params) ->
+  NodeName = hd(Params),
+  Username = hd(tl(Params)),
+  Password = hd(tl(tl(Params))),
+  Managers = hd(tl(tl(tl(Params)))),
+  AtomizedManagers = lists:map(fun(X) -> list_to_atom(X) end, Managers),
   os:cmd("epmd -daemon"),
   net_kernel:start([list_to_atom(NodeName), shortnames]),
-  %% I don't think we need to register players at all?
   gen_server:start({local, ?PROCNAME}, ?MODULE, 
-  	        {Username, Password, TournamentManagerNames}, []).
+  	        {Username, Password, AtomizedManagers}, []).
 
 
 %%%============================================================================
@@ -269,11 +273,11 @@ logout(TournamentPid) ->
 %% @doc Sends a message to all of the nodes in the list of tournament managers asking
 %% them each to register the player with the given username and password
 login_to_managers([], _, _) -> ok;
-login_to_managers(TournamentManagerNames, Username, Password) ->
-  io:format(timestamp() ++ ": sending login message to node with name '~p~n",
-    [hd(TournamentManagerNames)]),
-  {?MANAGER_NAME, hd(TournamentManagerNames)} ! {login, self(), Username, {Username, Password}},
-  login_to_managers(tl(TournamentManagerNames), Username, Password).
+login_to_managers(Managers, Username, Password) ->
+  io:format(timestamp() ++ ": sending login message to node with name ~p~n",
+    [hd(Managers)]),
+  {?MANAGER_NAME, hd(Managers)} ! {login, self(), Username, {Username, Password}},
+  login_to_managers(tl(Managers), Username, Password).
 
 
     
