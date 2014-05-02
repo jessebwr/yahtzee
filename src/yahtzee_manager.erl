@@ -70,7 +70,7 @@ main([StrNodeName]) ->
     NodeName = list_to_atom(StrNodeName),
     os:cmd("epmd -daemon"),
     net_kernel:start([NodeName, shortnames]),
-    io:format(timestamp() ++ ": starting network kernel with node name ~p~n", [NodeName]),
+    io:format(utils:timestamp() ++ ": starting network kernel with node name ~p~n", [NodeName]),
     gen_server:start({local, NodeName}, yahtzee_manager, {}, []).
 
 
@@ -121,12 +121,12 @@ handle_cast(_, S) ->
 %% @doc This message is received from a player and is used to log into the 
 %% tournament manager
 handle_info({login, Pid, Username, {Username, Password}}, S) ->
-    io:format(timestamp() ++ ": received login message from ~p~n", [Username]),
+    io:format(utils:timestamp() ++ ": received login message from ~p~n", [Username]),
     LoginTicket = make_ref(),
 
     case ets:lookup(?UserInfo, Username) of
 	[] ->
-      io:format(timestamp() ++ ": ~p is a new player, now logging them in~n", [Username]),
+      io:format(utils:timestamp() ++ ": ~p is a new player, now logging them in~n", [Username]),
 	    %% Initializing the user in our record database
 	    ets:insert(?UserInfo, {Username, #user{password = Password}}),
 
@@ -139,7 +139,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
 	    {noreply, S};
 
 	[{Username, {Password, _, _, _, _}}] ->
-      io:format(timestamp() ++ ": ~p has logged in before, now logging them back in~n", [Username]),
+      io:format(utils:timestamp() ++ ": ~p has logged in before, now logging them back in~n", [Username]),
 
 	    %% Monitoring it and stting up its current info
 	    MonitorRef = monitor(process, Pid),
@@ -151,7 +151,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
 
 	%% They didn't give the right password
 	[{Username, {_DiffPassword, _, _, _, _}}] ->
-      io:format(timestamp() ++ ": Incorrect password entered!~n"),
+      io:format(utils:timestamp() ++ ": Incorrect password entered!~n"),
 	    Pid ! {incorrect_password, Username},
 	    {noreply, S}
     end;
@@ -162,7 +162,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
 %% @doc This message is received from a player who wants to log out
 %% a player with the username Username
 handle_info({logout, Pid, Username, LoginTicket}, S) ->
-    io:format(timestamp() ++ ": received logout message from ~p~n", [Username]),
+    io:format(utils:timestamp() ++ ": received logout message from ~p~n", [Username]),
     [{Username, {_Pid, MonitorRef, TrueLoginTicket}}] = ets:lookup(?CurrentPlayerLoginInfo, Username),
 
     case LoginTicket == TrueLoginTicket of
@@ -178,7 +178,7 @@ handle_info({logout, Pid, Username, LoginTicket}, S) ->
 
 	%% Someone else was trying to log them out...
 	false ->
-      io:format(timestamp() ++ ": Warning! Logout message sent from incorrect source~n"),
+      io:format(utils:timestamp() ++ ": Warning! Logout message sent from incorrect source~n"),
 	    Pid ! {incorrect_login_ticket, Username},
 	    {noreply, S}
     end;
@@ -188,7 +188,7 @@ handle_info({logout, Pid, Username, LoginTicket}, S) ->
 %% specified tournament
 
 handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
-    io:format(timestamp() ++ ": accept_tournament message received from ~p~n", [Username]),
+    io:format(utils:timestamp() ++ ": accept_tournament message received from ~p~n", [Username]),
     [{Username, {_Pid, _MonitorRef, TrueLoginTicket}}] = ets:lookup(?CurrentPlayerLoginInfo, Username),
     case LoginTicket == TrueLoginTicket of
 	true ->
@@ -210,7 +210,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 		    NumPlayersReplied = T#tournament.numPlayersReplied + 1,
 		    case NumPlayersReplied == T#tournament.numNeededReplies of
 			true ->
-          io:format(timestamp() ++ ": enough players have replied... starting 
+          io:format(utils:timestamp() ++ ": enough players have replied... starting 
                                     the tournament~n"),
 			    NewTM = T#tournament{listOfPlayers = NewListOfPlayers,
 						 numPlayersReplied = NumPlayersReplied,
@@ -220,7 +220,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 			    {noreply, S};
 
 			false ->
-          io:format(timestamp() ++ ": we still need more players to reply 
+          io:format(utils:timestamp() ++ ": we still need more players to reply 
                                     before starting the tournament~n"),
 			    NewTM = T#tournament{numPlayersReplied = NumPlayersReplied,
 						 listOfPlayers = NewListOfPlayers},
@@ -229,7 +229,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 		    end
 	    end;
 	false -> 
-      io:format(timestamp() ++ ": incorrect login ticket received from ~p~n", [Username]),
+      io:format(utils:timestamp() ++ ": incorrect login ticket received from ~p~n", [Username]),
 	    Pid ! {incorrect_login_ticket, Username},
 	    {noreply, S}
     end;
@@ -242,7 +242,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 %% specified tournament
 
 handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
-    io:format(timestamp() ++ ": reject_tournament message received from ~p~n", [Username]),
+    io:format(utils:timestamp() ++ ": reject_tournament message received from ~p~n", [Username]),
     [{Username, {_Pid, _MonitorRef, TrueLoginTicket}}] = ets:lookup(?CurrentPlayerLoginInfo, Username),
     case LoginTicket == TrueLoginTicket of
 	true ->
@@ -262,14 +262,14 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 		    %% If we have enough replies, start the tournament
 		    case NumPlayersReplied == T#tournament.numNeededReplies of
 			true ->
-          io:format(timestamp() ++ ": enough players have replied... starting 
+          io:format(utils:timestamp() ++ ": enough players have replied... starting 
                                     the tournament~n"),
 			    NewTM = T#tournament{numPlayersReplied = NumPlayersReplied,
 						 started = true},
 			    start_tournament(Tid, NewTM),
 			    {noreply, S};
 			false ->
-          io:format(timestamp() ++ ": we still need more players to reply 
+          io:format(utils:timestamp() ++ ": we still need more players to reply 
                                     before starting the tournament~n"),
 			    NewTM = T#tournament{numPlayersReplied = NumPlayersReplied},
 			    ets:insert(?TournamentInfo, {Tid, NewTM}),
@@ -285,7 +285,7 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 %% Handle a non-scoring message, where scorecard-line is 0
 handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0} }, S) ->
-    io:format(timestamp() ++ ": received play_action message from ~p 
+    io:format(utils:timestamp() ++ ": received play_action message from ~p 
                                 with the following info~nTid: ~p~n
                                 Gid: ~p~nRollNum: ~p~n
                                 DiceToKeep: ~p~nTid: ~p~n
@@ -298,10 +298,15 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 	    %% doesn't specify any action
 	    {noreply, S};
 	[{Tid, Gid}, M] ->
+    P1 = M#match.p1,
+    P1RollNum = M#match.p1RollNum,
+
+    P2 = M#match.p2,
+    P2RollNum = M#match.p2RollNum,
 	    case Username of
-		M#match.p1 ->
+		P1 ->
 		    case RollNum of
-			M#match.p1RollNum when (RollNum =< 3 and RollNum > 0) ->
+			P1RollNum when RollNum =< 3, RollNum > 0 ->
 			    {NewDiceList, NewDiceToSend} = 
 				updateDiceList( DiceList, DiceToKeep ),
 			    NewMatch = M#match{p1RollNum = RollNum + 1,
@@ -313,9 +318,9 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 			_ ->
 			    kick_out_cheater( Username, Tid, Gid )
 		    end;
-		M#match.p2 ->
+		P2 ->
 		    case RollNum of
-			M#match.p2RollNum when RollNum <= 3 and RollNum > 0 ->
+			P2RollNum when RollNum =< 3, RollNum > 0 ->
 			    {NewDiceList, NewDiceToSend} = 
 				updateDiceList( DiceList, DiceToKeep ),
 			    NewMatch = M#match{p2RollNum = RollNum + 1,
@@ -328,8 +333,9 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 			    kick_out_cheater( Username, Tid, Gid )
 		    end;
 		_ -> %% Ignore this mystery user
-	    end
-    end,
+        io:format(utils:timestamp() ++ ": not recognized message: ~p~n")
+	  end
+  end,
     {noreply, S};
 	    			    
 	
@@ -337,8 +343,8 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %% We don't care about DiceToKeep, since you can't reroll blindly (that is,
 %% you can't say "score it in this box after rerolling these dice" as a single
 %% move) and don't care about RollNum since we rset it here anyway
-handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, _RollNum, _DiceToKeep, ScorecardLine} }, S) ->
-    io:format(timestamp() ++ ": received play_action message from ~p 
+handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScorecardLine} }, S) ->
+    io:format(utils:timestamp() ++ ": received play_action message from ~p 
                                 with the following info~nTid: ~p~n
                                 Gid: ~p~nRollNum: ~p~n
                                 DiceToKeep: ~p~nTid: ~p~n
@@ -350,15 +356,18 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, _RollNum, _DiceToKeep,
 	    %% doesn't specify any action
 	    {noreply, S};
 	[{Tid, Gid}, M] ->
+    P1 = M#match.p1,
+    P2 = M#match.p2,
+
 	    case Username of
-		M#match.p1 ->
+		P1 ->
 		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
 						    ScoreCardLine,
 						    M#match.p1ListOfDice ),
 		    NewMatch = M#match{p1ScoreCard = NewScoreCard,
 				       p1RollNum = 0},
 		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch});
-		M#match.p2 ->
+		P2 ->
 		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
 						    ScoreCardLine,
 						    M#match.p2ListOfDice ),
@@ -373,9 +382,8 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, _RollNum, _DiceToKeep,
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%% RECIEVING MESSAGES FROM THE OUTSIDE WORLD %%%%%%%%%%%%%%%
 
-handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S)
-  io:format(timestamp() ++ ": received request_tournament message from ~p~n", [Pid]),
-  when (NumPlayers rem 2) == 1 ->
+handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S) when (NumPlayers rem 2) == 1 ->
+    io:format(utils:timestamp() ++ ": received request_tournament message from ~p~n", [Pid]),
     Tid = make_ref(),
 
     %% Getting Ets Table Keys i.e. Usernames
@@ -388,7 +396,7 @@ handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S)
 				 pidThatRequested = Pid },
 
     %% Ask each of the players
-    io:format(timestamp() ++ ": asking players if they want to join the tournament~n"),
+    io:format(utils:timestamp() ++ ": asking players if they want to join the tournament~n"),
     lists:foreach(fun(X) -> 
 			  [{X, XInfo}] = ets:lookup(?CurrentPlayerLoginInfo, X),
 			  handle_ask_player(X, XInfo, Tid) 
@@ -400,7 +408,7 @@ handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S)
 
 
 handle_info({tournament_info, Pid, Tid}, S) ->
-    io:format(timestamp() ++ ": received tournament_info message from ~p~n", [Pid]),
+    io:format(utils:timestamp() ++ ": received tournament_info message from ~p~n", [Pid]),
 
     case ets:lookup(?TournamentInfo, Tid) of
 	[{Tid, T}] ->
@@ -414,7 +422,7 @@ handle_info({tournament_info, Pid, Tid}, S) ->
     end;
 
 handle_info({user_info, Pid, Username}, S) ->
-    io:format(timestamp() ++ ": received user_info message from ~p~n", [Pid]),
+    io:format(utils:timestamp() ++ ": received user_info message from ~p~n", [Pid]),
     case ets:lookup(?UserInfo, Username) of
 	[{Username, User}] ->
 	    Wins = User#user.match_wins,
@@ -422,10 +430,10 @@ handle_info({user_info, Pid, Username}, S) ->
 	    Tournaments_played = User#user.tournaments_played,
 	    Tournaments_won = User#user.tournaments_won,
 	    Pid ! {user_status, self(), {Username, Wins, Losses, Tournaments_played, Tournaments_won}},
-	    {noreply, S}
+	    {noreply, S};
 		_Else ->
 				   %% User isn't registered
-				   {noreply, S};
+				   {noreply, S}
     end;
 
 %%%%%%%%%%%%%%% END RECIEVING MESSAGES FROM THE OUTSIDE WORLD %%%%%%%%%%%%%%%
@@ -437,13 +445,13 @@ handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
     %% Look up the username by pattern matching on the record stored in the 
     %% ets table CurrentPlayerLoginInfo.
     Username = hd( ets:match( ?CurrentPlayerLoginInfo, {'$1', {Pid, '_', '_'} } ) ),
-    io:format(timestamp() ++ ": received DOWN message from ~p
+    io:format(utils:timestamp() ++ ": received DOWN message from ~p
                               with Pid ~p~n", [Username, Pid]),
     handle_gone( Username ).
 
 
 handle_info(MSG, S) ->
-    io:format("not recognized message: ~p~n", [MSG]),
+    io:format(utils:timestamp() ++ ": not recognized message: ~p~n", [MSG]),
     {noreply, S}.
 
 handle_gone(Username) ->
@@ -515,8 +523,8 @@ handle_gone_game(Tid, Gid, Username, 2) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(_Reason, _State) ->
-    io:format(utils:timestamp() ++ ": terminate reason: ~p~n", [_Reason]).
+terminate(Reason, _State) ->
+    io:format(utils:utils:timestamp() ++ ": terminate reason: ~p~n", [Reason]).
 
 
 
@@ -693,7 +701,7 @@ updateScoreCard( ScoreCard, 13, ListOfDice ) ->
 
 
 updateDiceList( DiceList, DiceToKeep ) ->
-    updateDiceList( DiceList, DiceToKeep, 0, [] );
+    updateDiceList( DiceList, DiceToKeep, 0, [] ).
 
 updateDiceList( DiceList, [], 0, DiceToSend ) ->
     {DiceList, DiceToSend};
