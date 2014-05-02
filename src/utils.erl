@@ -3,7 +3,9 @@
 -export([nextPow2/1,
          is_pow2/1,
          timestamp/0,
-         generateDice/0]).
+         log2/1,
+	 count/2,
+	 set_list_index/3]).
 
 %% @spec nextPow2(X) -> integer()
 %% @doc Finds the next power of 2 that is greater than X,
