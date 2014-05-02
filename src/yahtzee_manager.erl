@@ -447,7 +447,7 @@ handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
     Username = hd( ets:match( ?CurrentPlayerLoginInfo, {'$1', {Pid, '_', '_'} } ) ),
     io:format(utils:timestamp() ++ ": received DOWN message from ~p
                               with Pid ~p~n", [Username, Pid]),
-    handle_gone( Username ).
+    handle_gone( Username );
 
 
 handle_info(MSG, S) ->
@@ -465,7 +465,6 @@ handle_gone_game(Tid, Gid, Username, 1) ->
     [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
     ets:delete(?MatchTable, {Tid, Gid} ),
     [{_, T}] = ets:lookup(?TournamentInfo, Tid),
-
 
     P1 = M#match.p1,
     P2 = M#match.p2,
@@ -495,11 +494,12 @@ handle_gone_game(Tid, Gid, Username, 1) ->
 handle_gone_game(Tid, Gid, Username, 2) ->
     [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
     ets:delete(?MatchTable, {Tid, Gid} ),
+    [{_, T}] = ets:lookup(?TournamentInfo, Tid),
 
     P1 = M#match.p1,
     P2 = M#match.p2,
     NewCurrentGame = M#match.currentGame + 1,
-    GamesPerMatch = M#match.gamesPerMatch,
+    GamesPerMatch = T#tournament.gamesPerMatch,
     P1Win = M#match.p1Win + 1,
     P2Win = M#match.p2Win,
 
@@ -559,7 +559,7 @@ start_tournament(Tid, T) ->
 
     RoundOne = create_initial_bracket( ListOfPlayers, [], NumByesNeeded ),
     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
-    TailBracket = create_matches( Bracket, RoundOne),  %% Create first round matches 
+    TailBracket = create_matches( Bracket, 0, Tid, RoundOne),  %% Create first round matches 
                                                        %% and advance players whose
                                                        %% opponent is 'bye'
     UpdatedBracket = [RoundOne | TailBracket], %% Complete initial tournament bracket
@@ -568,7 +568,7 @@ start_tournament(Tid, T) ->
     NewT = T#tournament{ started = true,
 			 bracket = UpdatedBracket },
     start_matches( Tid, Matches ),
-    T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, PlayerList, blah}}.
+    T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, ListOfPlayers, blah}}.
 
 
 
@@ -596,10 +596,15 @@ initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds )
     NextRound = lists:duplicate( math:pow(2, CurrentRoundSize), none ),
     initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
+%% @spec handle_match_over(Tid, P2, P1) -> none()
+%% @doc Once a player has won, or because the other player crashed and
+%% didn't log back in in time, update the tournament bracket, both
+%% user's win and loss records, and initiate a new match
+handle_match_over(Tid, P2, P1) ->
+  implementSOMETHINGHERE.
 
 
-
-create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne,) ->
+create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
     [RoundOne | Rest];
 
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
@@ -607,12 +612,12 @@ create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
     create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne);
 
-create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ], Tid, RoundOne) ->
+create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
+                                                        CurrMatchInd, Tid, RoundOne) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
-						     p2 = SecondPlayer,
-                                                   }} ),
-    create_matches( [RestPlayers, RoundTwo | RestRounds], Tid, RoundOne).
+						                                         p2 = SecondPlayer}}),
+    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne).
 
 
 
@@ -670,7 +675,7 @@ handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
 
 %% For the top half (i.e. the first 6 boxes), just count
 updateScoreCard( ScoreCard, Row, ListOfDice ) 
-  when Row > 0 and Row <= 6 ->
+  when Row > 0, Row =< 6 ->
     utils:set_list_index(ScoreCard, Row, utils:count(ListOfDice, Row) );
 
 %% Three of a kind
