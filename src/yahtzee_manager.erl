@@ -67,11 +67,11 @@
 %%% API
 %%%============================================================================
 
-main(StrNodeName) ->
+main([StrNodeName]) ->
     NodeName = list_to_atom(StrNodeName),
     os:cmd("epmd -daemon"),
     net_kernel:start([NodeName, shortnames]),
-    io:format(utils:timestamp() ++ ": starting network kernel with node name ~p~n", [NodeName]),
+    io:format(utils:timestamp() ++ ": starting network kernel with node name ~p~n", [node()]),
     gen_server:start({local, ?MODULE}, ?MODULE, {}, []).
 
 
@@ -103,6 +103,8 @@ init({}) ->
 
     %% A dictionary of Username:{Pid, MonitorRef, LoginTicket}
     ets:new(?CurrentPlayerLoginInfo, [set, protected, named_table]),
+
+    io:format(utils:timestamp() ++ ": all ets tables succesfully initialized~n"),
 
 
     {ok, #tm{}}.
