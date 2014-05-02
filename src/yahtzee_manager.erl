@@ -425,11 +425,13 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %%%%%%%%%%%%%% RECIEVING MESSAGES FROM THE OUTSIDE WORLD %%%%%%%%%%%%%%%
 
 handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S) when (NumPlayers rem 2) == 1 ->
-    io:format(utils:timestamp() ++ ": received request_tournament message from ~p~n", [Pid]),
+    io:format(utils:timestamp() ++ ": received request_tournament message from ~p
+                                    for a tournament with ~p players and ~p games~n",
+                                     [Pid, NumPlayers, GamesPerMatch]),
     Tid = make_ref(),
 
     %% Getting Ets Table Keys i.e. Usernames
-    PlayerList = lists:flatten(ets:match(?CurrentPlayerLoginInfo, {'$1', '_'})),
+    PlayerList = ets:match(?CurrentPlayerLoginInfo, {'$1', '_'}),
 
     {NumChosenPlayers, ChosenPlayers} = shuffle(PlayerList, NumPlayers),
 
@@ -440,8 +442,10 @@ handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S) when (Num
     %% Ask each of the players
     io:format(utils:timestamp() ++ ": asking players if they want to join the tournament~n"),
     lists:foreach(fun(X) -> 
-			  [{X, XInfo}] = ets:lookup(?CurrentPlayerLoginInfo, X),
-			  handle_ask_player(X, XInfo, Tid) 
+        Player = hd(X),
+        io:format("~p~n", [Player]),
+			  [{PlayerName, PlayerInfo}] = ets:lookup(?CurrentPlayerLoginInfo, Player),
+			  handle_ask_player(PlayerName, PlayerInfo, Tid) 
 		  end, ChosenPlayers),
 
     %% inserting the tournament info
