@@ -677,15 +677,29 @@ create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
-    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne);
+    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, [bye, SecondPlayer | RoundOne]);
 
 create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
 						     p2 = SecondPlayer}}),
-    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne).
+    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, [FirstPlayer, SecondPlayer | RoundOne]).
 
+
+create_single_round_match( Bracket = [[bye, _PlayerTwo]], Tid ) ->
+    Bracket;
+
+create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
+    Bracket;
+
+create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
+    GameRef = make_ref(),
+    ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = PlayerOne,
+						     p2 = PlayerTwo }}).
+    
+    
+    
 
 
 start_matches( _, [] ) ->
