@@ -40,8 +40,5 @@ set_list_index( List, Index, Value ) ->
   lists:append( HeadList, [Value | TailList] ).
 
 
-
-generateDice() ->
-    {A, B, C} = now(),
-    random:seed(A, B, C),
-    [random:uniform(6) || _ <- lists:seq(1, 15)].
+count(List, Elem) ->
+    length([ok || I <- List, I == Elem]).

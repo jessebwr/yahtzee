@@ -266,9 +266,77 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 
 
-handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScorecardLine} }, S) ->
-    ok.
-
+%% Handle a non-scoring message, where scorecard-line is 0
+handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0} }, S) ->
+    case ets:lookup(?MatchTable, {Tid, Gid}) of
+	[] ->
+	    %% Invalid game that doesn't exist....  Ignore it since the protocol
+	    %% doesn't specify any action
+	    {noreply, S};
+	[{Tid, Gid}, M] ->
+	    case Username of
+		M#match.p1 ->
+		    case RollNum of
+			M#match.p1RollNum when RollNum <= 3 and RollNum > 0 ->
+			    {NewDiceList, NewDiceToSend} = 
+				updateDiceList( DiceList, DiceToKeep ),
+			    NewMatch = M#match{p1RollNum = RollNum + 1,
+					       p1ListOfDice = NewDiceList},
+			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
+			    Pid ! {play_request, self(), Username,
+				   {Ref, Tid, Gid, RollNum + 1, NewDiceList,
+				    M#match.p1ScoreCard, M#match.p2ScoreCard}};
+			_ ->
+			    kick_out_cheater( Username, Tid, Gid )
+		    end;
+		M#match.p2 ->
+		    case RollNum of
+			M#match.p2RollNum when RollNum <= 3 and RollNum > 0 ->
+			    {NewDiceList, NewDiceToSend} = 
+				updateDiceList( DiceList, DiceToKeep ),
+			    NewMatch = M#match{p2RollNum = RollNum + 1,
+					       p2ListOfDice = NewDiceList},
+			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
+			    Pid ! {play_request, self(), Username,
+				   {Ref, Tid, Gid, RollNum + 1, NewDiceList,
+				    M#match.p2ScoreCard, M#match.p1ScoreCard}};
+			_ ->
+			    kick_out_cheater( Username, Tid, Gid )
+		    end;
+		_ -> %% Ignore this mystery user
+	    end
+    end,
+    {noreply, S};
+	    			    
+	
+%% Scoring move!  :(
+%% We don't care about DiceToKeep, since you can't reroll blindly (that is,
+%% you can't say "score it in this box after rerolling these dice" as a single
+%% move) and don't care about RollNum since we rset it here anyway
+handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, _RollNum, _DiceToKeep, ScorecardLine} }, S) ->
+    case ets:lookup(?MatchTable, {Tid, Gid}) of
+	[] ->
+	    %% Invalid game that doesn't exist....  Ignore it since the protocol
+	    %% doesn't specify any action
+	    {noreply, S};
+	[{Tid, Gid}, M] ->
+	    case Username of
+		M#match.p1 ->
+		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
+						    ScoreCardLine,
+						    M#match.p1ListOfDice ),
+		    NewMatch = M#match{p1ScoreCard = NewScoreCard,
+				       p1RollNum = 0},
+		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch});
+		M#match.p2 ->
+		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
+						    ScoreCardLine,
+						    M#match.p2ListOfDice ),
+		    NewMatch = M#match{p2ScoreCard = NewScoreCard,
+				       p2RollNum = 0},
+		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch})
+	    end
+    end;
 
 
 %%%%%%%%%%%%%%%% END RECEIVING MESSAGES SENT BY PLAYER %%%%%%%%%%%%%%%%%
@@ -549,6 +617,61 @@ handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
     ok.
 
 
+%% Actually score a turn!  Need to add a wrapper that checks for a Yahtzee Bonus
+%% regardless of what row the player wanted the turn scored in
+
+%% For the top half (i.e. the first 6 boxes), just count
+updateScoreCard( ScoreCard, Row, ListOfDice ) 
+  when Row > 0 and Row <= 6 ->
+    utils:set_list_index(ScoreCard, Row, utils:count(ListOfDice, Row) );
+
+%% Three of a kind
+updateScoreCard( ScoreCard, 7, ListOfDice ) ->
+    ScoreCard;
+
+%% Four of a kind
+updateScoreCard( ScoreCard, 8, ListOfDice ) ->
+    ScoreCard;
+
+%% Full House
+updateScoreCard( ScoreCard, 9, ListOfDice ) ->
+    ScoreCard;
+
+%% Small Straight
+updateScoreCard( ScoreCard, 10, ListOfDice ) ->
+    ScoreCard;
+
+%% Large Straight
+updateScoreCard( ScoreCard, 11, ListOfDice ) ->
+    ScoreCard;
+
+%% Yahtzee
+updateScoreCard( ScoreCard, 12, ListOfDice ) ->
+    ScoreCard;
+
+%% Chance
+updateScoreCard( ScoreCard, 13, ListOfDice ) ->
+    ScoreCard.
+
+
+updateDiceList( DiceList, DiceToKeep ) ->
+    updateDiceList( DiceList, DiceToKeep, 0, [] );
+
+updateDiceList( DiceList, [], 0, DiceToSend ) ->
+    {DiceList, DiceToSend};
+
+updateDiceList( [FirstDie|RestDice], [FirstToKeep|RestToKeep], NumDiceToSend, [] ) ->
+    case FirstToKeep of
+	true ->
+	    {DiceList, NewDiceToSend} = updateDiceList( RestDice, RestToKeep, NumDiceToSend, [] ),
+	    {[FirstDie | DiceList], NewDiceToSend};
+	false ->
+	    updateDiceList( RestDice, RestToKeep, NumDiceToSend + 1, [] )
+    end;
+
+updateDiceList( [FirstDie|RestDice], [], NumDiceToSend, DiceToSend ) ->
+    updateDiceList( RestDice, [], NumDiceToSend - 1, [FirstDie|DiceToSend] ).
+    
 
 
 generateDice() ->
