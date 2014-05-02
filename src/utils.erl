@@ -37,3 +37,7 @@ timestamp() ->
 set_list_index( List, Index, Value ) ->
   {HeadList, [_|TailList]} = lists:split( Index - 1, List ),
   lists:append( HeadList, [Value | TailList] ).
+
+
+count(List, Elem) ->
+    length([ok || I <- List, I == Elem]).
