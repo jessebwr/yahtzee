@@ -283,99 +283,99 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 
 
-%% Handle a non-scoring message, where scorecard-line is 0
-handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0} }, S) ->
-    io:format(utils:timestamp() ++ ": received play_action message from ~p 
-                                with the following info~nTid: ~p~n
-                                Gid: ~p~nRollNum: ~p~n
-                                DiceToKeep: ~p~nTid: ~p~n
-                                Scorecard Line: 0~n",
-                        [Username, Tid, Gid, RollNum, DiceToKeep]),
+% %% Handle a non-scoring message, where scorecard-line is 0
+% handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0} }, S) ->
+%     io:format(utils:timestamp() ++ ": received play_action message from ~p 
+%                                 with the following info~nTid: ~p~n
+%                                 Gid: ~p~nRollNum: ~p~n
+%                                 DiceToKeep: ~p~nTid: ~p~n
+%                                 Scorecard Line: 0~n",
+%                         [Username, Tid, Gid, RollNum, DiceToKeep]),
 
-    case ets:lookup(?MatchTable, {Tid, Gid}) of
-	[] ->
-	    %% Invalid game that doesn't exist....  Ignore it since the protocol
-	    %% doesn't specify any action
-	    {noreply, S};
-	[{Tid, Gid}, M] ->
-    P1 = M#match.p1,
-    P1RollNum = M#match.p1RollNum,
+%     case ets:lookup(?MatchTable, {Tid, Gid}) of
+% 	[] ->
+% 	    %% Invalid game that doesn't exist....  Ignore it since the protocol
+% 	    %% doesn't specify any action
+% 	    {noreply, S};
+% 	[{Tid, Gid}, M] ->
+%     P1 = M#match.p1,
+%     P1RollNum = M#match.p1RollNum,
 
-    P2 = M#match.p2,
-    P2RollNum = M#match.p2RollNum,
-	    case Username of
-		P1 ->
-		    case RollNum of
-			P1RollNum when RollNum =< 3, RollNum > 0 ->
-			    {NewDiceList, NewDiceToSend} = 
-				updateDiceList( DiceList, DiceToKeep ),
-			    NewMatch = M#match{p1RollNum = RollNum + 1,
-					       p1ListOfDice = NewDiceList},
-			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
-			    Pid ! {play_request, self(), Username,
-				   {Ref, Tid, Gid, RollNum + 1, NewDiceList,
-				    M#match.p1ScoreCard, M#match.p2ScoreCard}};
-			_ ->
-			    kick_out_cheater( Username, Tid, Gid )
-		    end;
-		P2 ->
-		    case RollNum of
-			P2RollNum when RollNum =< 3, RollNum > 0 ->
-			    {NewDiceList, NewDiceToSend} = 
-				updateDiceList( DiceList, DiceToKeep ),
-			    NewMatch = M#match{p2RollNum = RollNum + 1,
-					       p2ListOfDice = NewDiceList},
-			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
-			    Pid ! {play_request, self(), Username,
-				   {Ref, Tid, Gid, RollNum + 1, NewDiceList,
-				    M#match.p2ScoreCard, M#match.p1ScoreCard}};
-			_ ->
-			    kick_out_cheater( Username, Tid, Gid )
-		    end;
-		_ -> %% Ignore this mystery user
-        io:format(utils:timestamp() ++ ": not recognized message: ~p~n")
-	  end
-  end,
-    {noreply, S};
+%     P2 = M#match.p2,
+%     P2RollNum = M#match.p2RollNum,
+% 	    case Username of
+% 		P1 ->
+% 		    case RollNum of
+% 			P1RollNum when RollNum =< 3, RollNum > 0 ->
+% 			    {NewDiceList, NewDiceToSend} = 
+% 				updateDiceList( DiceList, DiceToKeep ),
+% 			    NewMatch = M#match{p1RollNum = RollNum + 1,
+% 					       p1ListOfDice = NewDiceList},
+% 			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
+% 			    Pid ! {play_request, self(), Username,
+% 				   {Ref, Tid, Gid, RollNum + 1, NewDiceList,
+% 				    M#match.p1ScoreCard, M#match.p2ScoreCard}};
+% 			_ ->
+% 			    kick_out_cheater( Username, Tid, Gid )
+% 		    end;
+% 		P2 ->
+% 		    case RollNum of
+% 			P2RollNum when RollNum =< 3, RollNum > 0 ->
+% 			    {NewDiceList, NewDiceToSend} = 
+% 				updateDiceList( DiceList, DiceToKeep ),
+% 			    NewMatch = M#match{p2RollNum = RollNum + 1,
+% 					       p2ListOfDice = NewDiceList},
+% 			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
+% 			    Pid ! {play_request, self(), Username,
+% 				   {Ref, Tid, Gid, RollNum + 1, NewDiceList,
+% 				    M#match.p2ScoreCard, M#match.p1ScoreCard}};
+% 			_ ->
+% 			    kick_out_cheater( Username, Tid, Gid )
+% 		    end;
+% 		_ -> %% Ignore this mystery user
+%         io:format(utils:timestamp() ++ ": not recognized message: ~p~n")
+% 	  end
+%   end,
+%     {noreply, S};
 	    			    
 	
-%% Scoring move!  :(
-%% We don't care about DiceToKeep, since you can't reroll blindly (that is,
-%% you can't say "score it in this box after rerolling these dice" as a single
-%% move) and don't care about RollNum since we rset it here anyway
-handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScorecardLine} }, S) ->
-    io:format(utils:timestamp() ++ ": received play_action message from ~p 
-                                with the following info~nTid: ~p~n
-                                Gid: ~p~nRollNum: ~p~n
-                                DiceToKeep: ~p~nTid: ~p~n
-                                Scorecard Line: ~p~n",
-                        [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
-    case ets:lookup(?MatchTable, {Tid, Gid}) of
-	[] ->
-	    %% Invalid game that doesn't exist....  Ignore it since the protocol
-	    %% doesn't specify any action
-	    {noreply, S};
-	[{Tid, Gid}, M] ->
-    P1 = M#match.p1,
-    P2 = M#match.p2,
+% %% Scoring move!  :(
+% %% We don't care about DiceToKeep, since you can't reroll blindly (that is,
+% %% you can't say "score it in this box after rerolling these dice" as a single
+% %% move) and don't care about RollNum since we rset it here anyway
+% handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScorecardLine} }, S) ->
+%     io:format(utils:timestamp() ++ ": received play_action message from ~p 
+%                                 with the following info~nTid: ~p~n
+%                                 Gid: ~p~nRollNum: ~p~n
+%                                 DiceToKeep: ~p~nTid: ~p~n
+%                                 Scorecard Line: ~p~n",
+%                         [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
+%     case ets:lookup(?MatchTable, {Tid, Gid}) of
+% 	[] ->
+% 	    %% Invalid game that doesn't exist....  Ignore it since the protocol
+% 	    %% doesn't specify any action
+% 	    {noreply, S};
+% 	[{Tid, Gid}, M] ->
+%     P1 = M#match.p1,
+%     P2 = M#match.p2,
 
-	    case Username of
-		P1 ->
-		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
-						    ScoreCardLine,
-						    M#match.p1ListOfDice ),
-		    NewMatch = M#match{p1ScoreCard = NewScoreCard,
-				       p1RollNum = 0},
-		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch});
-		P2 ->
-		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
-						    ScoreCardLine,
-						    M#match.p2ListOfDice ),
-		    NewMatch = M#match{p2ScoreCard = NewScoreCard,
-				       p2RollNum = 0},
-		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch})
-	    end
-    end;
+% 	    case Username of
+% 		P1 ->
+% 		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
+% 						    ScoreCardLine,
+% 						    M#match.p1ListOfDice ),
+% 		    NewMatch = M#match{p1ScoreCard = NewScoreCard,
+% 				       p1RollNum = 0},
+% 		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch});
+% 		P2 ->
+% 		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
+% 						    ScoreCardLine,
+% 						    M#match.p2ListOfDice ),
+% 		    NewMatch = M#match{p2ScoreCard = NewScoreCard,
+% 				       p2RollNum = 0},
+% 		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch})
+% 	    end
+%     end;
 
 
 %%%%%%%%%%%%%%%% END RECEIVING MESSAGES SENT BY PLAYER %%%%%%%%%%%%%%%%%
@@ -464,11 +464,13 @@ handle_gone(Username) ->
 handle_gone_game(Tid, Gid, Username, 1) ->
     [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
     ets:delete(?MatchTable, {Tid, Gid} ),
+    [{_, T}] = ets:lookup(?TournamentInfo, Tid),
+
 
     P1 = M#match.p1,
     P2 = M#match.p2,
     NewCurrentGame = M#match.currentGame + 1,
-    GamesPerMatch = M#match.gamesPerMatch,
+    GamesPerMatch = T#tournament.gamesPerMatch,
     P1Win = M#match.p1Win,
     P2Win = M#match.p2Win + 1,
 
@@ -524,7 +526,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(Reason, _State) ->
-    io:format(utils:utils:timestamp() ++ ": terminate reason: ~p~n", [Reason]).
+    io:format(utils:timestamp() ++ ": terminate reason: ~p~n", [Reason]).
 
 
 
@@ -551,7 +553,7 @@ shuffle(List, K) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%% Tournament Bracket Code %%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start_tournament(Tid, T) ->
-    ListOfPlayers = T#tournament.listofPlayers,
+    ListOfPlayers = T#tournament.listOfPlayers,
     NumPlayers = length( ListOfPlayers ),
     NumByesNeeded = utils:nextPow2(NumPlayers) - NumPlayers,
 
