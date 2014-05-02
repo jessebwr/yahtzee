@@ -41,7 +41,7 @@
                 p2ScoreCard = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
                 p1,
                 p2,
-                p1RollNum = 1,
+                p1RollNum = 1, %% Which roll number are we on?
                 p2RollNum = 1,
                 p1Win = 0,
                 p2Win = 0,
@@ -70,6 +70,7 @@ main([StrNodeName]) ->
     NodeName = list_to_atom(StrNodeName),
     os:cmd("epmd -daemon"),
     net_kernel:start([NodeName, shortnames]),
+    io:format(timestamp() ++ ": starting network kernel with name ~p~n", )
     gen_server:start({local, NodeName}, yahtzee_manager, {}, []).
 
 
@@ -439,14 +440,17 @@ start_tournament(Tid, T) ->
     ListOfPlayers = T#tournament.listofPlayers,
     NumPlayers = length( ListOfPlayers ),
     NumByesNeeded = utils:nextPow2(NumPlayers) - NumPlayers,
+
     RoundOne = create_initial_bracket( ListOfPlayers, [], NumByesNeeded ),
     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
-    create_matches( Bracket ),  %% Create first round matches and advance players whose
-    %% opponent is 'bye'
-    create_matches( tl(Bracket) ),  %% Create second round matches
+    TailBracket = create_matches( Bracket, RoundOne),  %% Create first round matches 
+                                                       %% and advance players whose
+                                                       %% opponent is 'bye'
+    UpdatedBracket = [RoundOne | TailBracket], %% Complete initial tournament bracket
+
     Matches = ets:matches( ?MatchTable, { {Tid, '$1'}, $2 } ),
     NewT = T#tournament{ started = true,
-			 bracket = Bracket },
+			 bracket = UpdatedBracket },
     start_matches( Tid, Matches ),
     T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, PlayerList, blah}}.
 
@@ -477,20 +481,22 @@ initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds )
     initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
 
-create_matches( [ [] | _Rest ], _CurrMatchInd, _Tid ) ->
-    ok;
+
+
+create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne,) ->
+    [RoundOne | Rest];
 
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
-		CurrMatchInd, Tid ) ->
+		CurrMatchInd, Tid, RoundOne) ->
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
-    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid );
+    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne);
 
-create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ], Tid ) ->
+create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ], Tid, RoundOne) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
 						     p2 = SecondPlayer,
                                                    }} ),
-    create_matches( [RestPlayers, RoundTwo | RestRounds], Tid ).
+    create_matches( [RestPlayers, RoundTwo | RestRounds], Tid, RoundOne).
 
 
 

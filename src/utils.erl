@@ -2,7 +2,8 @@
 
 -export([nextPow2/1,
          is_pow2/1,
-         timestamp/0]).
+         timestamp/0,
+         generateDice/0]).
 
 %% @spec nextPow2(X) -> integer()
 %% @doc Finds the next power of 2 that is greater than X,
@@ -37,3 +38,10 @@ timestamp() ->
 set_list_index( List, Index, Value ) ->
   {HeadList, [_|TailList]} = lists:split( Index - 1, List ),
   lists:append( HeadList, [Value | TailList] ).
+
+
+
+generateDice() ->
+    {A, B, C} = now(),
+    random:seed(A, B, C),
+    [random:uniform(6) || _ <- lists:seq(1, 15)].
