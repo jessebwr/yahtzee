@@ -277,11 +277,31 @@ int sum(std::vector<int> v){
 // implemented, but I need to have some sort of diminishing heuristicVector
 // because the probability of getting any one of these as the game goes on
 // decreases over each turn.
-const std::vector<double> heuristicVector {2.0, 5.0, 9.0, 
-                                           12.0, 15.5, 19.0, 
-                                           21.0, 12.0, 22.0, 
-                                           28.0,31.0, 15.0, 
+
+// const std::vector<double> heuristicVector {1.5, 5.5, 8.9, 
+//                                            12.0, 15.5, 19.0, 
+//                                            22.0, 13.0, 22.5, 
+//                                            29.0,33.0, 17.0, 
+//                                            22.0};
+
+// const std::vector<double> heuristicVector {1.5, 4.5, 8.0, 
+//                                            11.0, 15.5, 18.0, 
+//                                            18.0, 10.0, 20.5, 
+//                                            24.0, 29.0, 10.0, 
+//                                            21.0};
+
+
+const std::vector<double> heuristicVector {1.5, 4.5, 8.0, 
+                                           11.0, 15.5, 18.0, 
+                                           18.0, 10.0, 20.5, 
+                                           24.0, 29.0, 10.0, 
                                            21.0};
+
+const std::vector<double> decayVector{1.0, 1.0, 1.0,
+                                      1.0, 1.0, 1.0,
+                                      0.97, 0.95, 0.95,
+                                      0.97, 0.95, 0.93,
+                                      1.0};
      
 double expectedValueOfFiveDice(Dice dice){
   double value = 0;
@@ -477,7 +497,7 @@ double ScoreCard::heuristicStateScore(){
   if (topBonus() > 0)
     stateScore += 35;
   else
-    stateScore += 22;
+    stateScore += 23;
   return stateScore;
 }
 
@@ -558,6 +578,7 @@ std::vector<Move> Player::getLegalMoves(){
 
 double Player::evOfMove(Move move){
   double ev = 0;
+  //int currentTurn = scoreCard.currentTurn() - 1;
   if (move.m != -1){
     ScoreCard newScoreCard = newScoreCardGivenDecision(move.m); 
     ev = newScoreCard.heuristicStateScore();
@@ -573,11 +594,12 @@ double Player::evOfMove(Move move){
     for (int i = 0; i < 14; i++){
       if (i == 13) {
         if (scoreCard.topBonus() != 0)
-          ev += 13;
+          ev += 12;
+        ev += 23;
       }
       else{
         if (scoreCard.scoreCardVector[i] != -1)
-          ev += (scoreCard.scoreCardVector[i] - heuristicVector[i]);
+          ev += (scoreCard.scoreCardVector[i] - heuristicVector[i]); //*pow(decayVector[i], currentTurn)
       }
     }
   }
