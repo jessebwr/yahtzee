@@ -144,7 +144,7 @@ handle_cast(_, S) ->
 %% @doc Message received from the system telling the player it has successfully
 %%      registered with the tournament manager
 handle_info({logged_in, Pid, _Username, LoginTicket}, State) ->
-  io:format(timestamp() ++ ": received logged_in message from Pid: ~p~n", [Pid]),
+  io:format(utils:timestamp() ++ ": received logged_in message from Pid: ~p~n", [Pid]),
   NewDict = dict:store(Pid, {LoginTicket, true}, State#state.tournamentDict),
   {noreply, State#state{tournamentDict = NewDict}};
 
@@ -154,7 +154,7 @@ handle_info({logged_in, Pid, _Username, LoginTicket}, State) ->
 %%      to the tournament
 handle_info({logout, TournamentPid}, State) ->
   {LoginTicket, _} = dict:fetch(TournamentPid, State#state.tournamentDict),
-  io:format(timestamp() ++ ": send logout message to tournament manager with PID ~p~n",
+  io:format(utils:timestamp() ++ ": send logout message to tournament manager with PID ~p~n",
                               [TournamentPid]),
   TournamentPid ! {logout, self(), State#state.username, LoginTicket},
   NewDict = dict:store(TournamentPid, {LoginTicket, false}, State#state.tournamentDict),
@@ -164,14 +164,14 @@ handle_info({logout, TournamentPid}, State) ->
 %% @doc Message received from the system asking the player if it would like to enter
 %%      a tournament
 handle_info({start_tournament, Pid, Username, Tid}, State) ->
-  io:format(timestamp() ++ ": received start_tournament message from Pid: ~p~n",
+  io:format(utils:timestamp() ++ ": received start_tournament message from Pid: ~p~n",
                                 [Pid]),
   TrueUsername = State#state.username,
   case Username of
     TrueUsername ->
       case ?AUTOMATIC_START of
         true ->
-          io:format(timestamp() ++ ": accepting request to start a tournament~n"),
+          io:format(utils:timestamp() ++ ": accepting request to start a tournament~n"),
           {LoginTicket, _} = dict:fetch(Pid, State#state.tournamentDict),
           Pid ! {accept_tournament, self(), State#state.username, {Tid, 
                                               LoginTicket}},
@@ -180,26 +180,26 @@ handle_info({start_tournament, Pid, Username, Tid}, State) ->
           PlayerResponse = io:get_line("Would you like to enter a tournment? (y/n): "),
           case PlayerResponse of
             "y\n" ->
-              io:format(timestamp() ++ ": accepting request to start a tournament~n"),
+              io:format(utils:timestamp() ++ ": accepting request to start a tournament~n"),
               {LoginTicket, _} = dict:fetch(Pid, State#state.tournamentDict),
               Pid ! {accept_tournament, self(), State#state.username, {Tid, 
                                           LoginTicket}},
               {noreply, State};
             "n\n" ->
-              io:format(timestamp() ++ ": rejecting request to start a tournament~n"),
+              io:format(utils:timestamp() ++ ": rejecting request to start a tournament~n"),
               {LoginTicket, _} = dict:fetch(Pid, State#state.tournamentDict),
               Pid ! {reject_tournament, self(), State#state.username, {Tid, 
                                             LoginTicket}},
               {noreply, State};
             true ->
-              io:format(timestamp() ++ ": input error! User needs to enter either 'y' or 'n'."
+              io:format(utils:timestamp() ++ ": input error! User needs to enter either 'y' or 'n'."
                                     ++ " Please try again~n"),
               handle_info({start_tournament, Pid, Username, Tid}, State)
           end
       end;
     true ->
-      io:format(timestamp() ++ ": incorrect username received from tournament manager with pid ~p! 
-                                        Trickery is afoot~n", [Pid]),
+      io:format(utils:timestamp() ++ ": incorrect username received from tournament manager with pid ~p! " ++ 
+                                        "Trickery is afoot~n", [Pid]),
       {noreply, State}
   end;
 
@@ -209,18 +209,20 @@ handle_info({start_tournament, Pid, Username, Tid}, State) ->
 %% based on which roll number this play is, the dice, and both player's scorecards
 handle_info({play_request, Pid, Username, {Ref, Tid, Gid, RollNumber, Dice,
                         Scorecard, OpponentsScorecard}}, State) ->
-  io:format(timestamp() ++ ": received a request to play from pid; ~p
-                        with Tid: ~p and Gid: ~p~n", [Pid, Tid, Gid]),
-  io:format(timestamp() ++ ": it is roll number ~p and the dice are ~p~n", [RollNumber, Dice]),
+  io:format(utils:timestamp() ++ ": received a request to play from pid; ~p " ++
+                        "with Tid: ~p and Gid: ~p~n", [Pid, Tid, Gid]),
+  io:format(utils:timestamp() ++ ": it is roll number ~p and the dice are ~p~n", [RollNumber, Dice]),
   TrueUsername = State#state.username,
   case Username of
     TrueUsername ->
       {DiceToKeep, ScorecardLine} = playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard),
-      Pid ! {play_action, self(), State#state.username, {Ref, Tid, Gid, RollNumber,
+      io:format(utils:timestamp() ++ ": sending play_action message with the following " ++
+                                      "dice to keep ~p~n", [DiceToKeep]),
+      Pid ! {play_action, self(), Username, {Ref, Tid, Gid, RollNumber,
                                                         DiceToKeep, ScorecardLine}},
       {noreply, State};
     true ->
-      io:format(timestamp() ++ ": incorrect username received from tournament manager with pid ~p! 
+      io:format(utils:timestamp() ++ ": incorrect username received from tournament manager with pid ~p! 
                                         Trickery is afoot~n", [Pid]),
       {noreply, State}
   end.
@@ -242,7 +244,7 @@ code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
 terminate(_Reason, _State) ->
-  io:format(timestamp() ++ ": terminate reason: ~p~n", [_Reason]).
+  io:format(utils:timestamp() ++ ": terminate reason: ~p~n", [_Reason]).
 
 
 
@@ -275,20 +277,9 @@ logout(TournamentPid) ->
 %% them each to register the player with the given username and password
 login_to_managers([], _, _) -> ok;
 login_to_managers(Managers, Username, Password) ->
-  io:format(timestamp() ++ ": sending login message to node with name ~p~n",
+  io:format(utils:timestamp() ++ ": sending login message to node with name ~p~n",
     [hd(Managers)]),
   {?MANAGER_NAME, hd(Managers)} ! {login, self(), Username, {Username, Password}},
   login_to_managers(tl(Managers), Username, Password).
 
 
-    
-
-%% @spec timestamp() -> string()
-%% @doc Generates a fancy looking timestamp, found on:
-%%		http://erlang.2086793.n4.nabble.com/formatting-timestamps-td3594191.html
-timestamp() -> 
-  Now = now(),
-  {_, _, Micros} = Now, 
-  {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(Now), 
-  io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w.~p", 
-                [YY, MM, DD, Hour, Min, Sec, Micros]). 
