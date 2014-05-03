@@ -632,7 +632,6 @@ start_tournament(Tid, T) ->
 			     create_single_round_match([RoundOne], Tid);
 			 not OnlyOneRound ->
 			     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
-           %% Good news, as of 11:31 Saturday the code works as expected up until this next function call
 			     create_matches( Bracket, 0, Tid, RoundOne)
 		     end,
     
@@ -728,7 +727,7 @@ create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRoun
 create_single_round_match( Bracket = [[bye, _PlayerTwo]], Tid ) ->
     Bracket;
 
-create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
+create_single_round_match( Bracket = [[_PlayerOne, bye]], Tid ) ->
     Bracket;
 
 create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
