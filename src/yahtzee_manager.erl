@@ -742,9 +742,9 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
 						 p1ListOfDice = P1NewBackups,
 						 p2ListOfDice = P2NewBackups}}),
 
-    io:format( utils:timestamp() ++ "Sending message to p1 (pid ~p): ~p", [Pid1, P1Msg] ),
+    io:format( utils:timestamp() ++ ": sending message to p1 (pid ~p): ~p~n", [Pid1, P1Msg] ),
     Pid1 ! {play_request, self(), P1, P1Msg},
-    io:format( utils:timestamp() ++ "Sending message to p2 (pid ~p): ~p", [Pid2, P2Msg] ),
+    io:format( utils:timestamp() ++ ": sending message to p2 (pid ~p): ~p~n", [Pid2, P2Msg] ),
     Pid2 ! {play_request, self(), P2, P2Msg}.
 
 
