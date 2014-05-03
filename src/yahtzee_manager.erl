@@ -339,11 +339,12 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %% you can't say "score it in this box after rerolling these dice" as a single
 %% move) and don't care about RollNum since we rset it here anyway
 handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine} }, S) ->
-    io:format(utils:timestamp() ++ ": received play_action message from ~p 
-                                with the following info~nTid: ~p~n
-	      Gid: ~p~nRollNum: ~p~n
-	      DiceToKeep: ~p~nTid: ~p~n
-	      Scorecard Line: ~p~n",
+    io:format(utils:timestamp() ++ ": received play_action message from ~p" ++
+                                "with the following " ++
+                                "info~nTid: ~p~n " ++
+	                              "Gid: ~p~nRollNum: ~p~n " ++
+	                              "DiceToKeep: ~p~nTid: ~p~n " ++
+	                              "Scorecard Line: ~p~n",
                         [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
     case ets:lookup(?MatchTable, {Tid, Gid}) of
 	[] ->
@@ -377,15 +378,19 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 	    %% Yup, the game ended.  We should determine the winner, etc.
 	    Tournament = ets:lookup(?TournamentInfo, Tid),
 	    MaxGames = Tournament#tournament.gamesPerMatch,
-	    case NewMatch#match.{p1ScoreCard = P1ScoreCard, 
-				 p2ScoreCard = P2ScoreCard} of
-		_ when scoreFullCard(P1ScoreCard) > scoreFullCard(P2ScoreCard)
+      P1ScoreCard = NewMatch#match.p1ScoreCard,
+      P2ScoreCard = NewMatch#match.p2ScoreCard,
+      % P1FinalScore = scoreFullCard(P1ScoreCard),
+      % P2FinalScore = scoreFullCard(P2ScoreCard),
+      % case 
+	    case true of
+		true when scoreFullCard(P1ScoreCard) > scoreFullCard(P2ScoreCard)
 			  -> 
 		    %% Now check if Player 1 won the match
 		    case P1Win + 1 > MaxGames / 2 of
 			true ->
-			    % Yup, the match is over, Player 1 won.
-			    ;
+          % Yup, the match is over, Player 1 won.
+          iMPLEMENTME;
 			false ->
 			    % Nope, start the next game.
 			    ets:delete(?MatchTable, {Tid, Gid}),
@@ -394,13 +399,13 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
 		    end;
-		_ when scoreFullCard(P2ScoreCard) > scoreFullCard(P1ScoreCard)
+		true when scoreFullCard(P2ScoreCard) > scoreFullCard(P1ScoreCard)
 		       ->
 		    %% Now check if Player 2 won the match
 		    case P2Win + 1 > MaxGames / 2 of
 			true ->
 			    % Yup, the match is over, Player 2 won.
-			    ;
+          iMPLEMENTME;
 			false ->
 			    % Nope, start the next game.
 			    ets:delete(?MatchTable, {Tid, Gid}),
@@ -409,7 +414,8 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
 		    end;    
-		_ ->
+		true ->
+        iMPLEMENTME
 		    %% OH NO A TIE
 	    end;
 	_ ->
@@ -624,12 +630,6 @@ start_tournament(Tid, T) ->
       false ->
         UpdatedBracket = create_matches( Bracket, 0, Tid, RoundOne)
 
-
-    TailBracket = create_matches( Bracket, 0, Tid, RoundOne),  %% Create first round matches 
-    %% and advance players whose
-    %% opponent is 'bye'
-    UpdatedBracket = [RoundOne | TailBracket], %% Complete initial tournament bracket
-
     Matches = ets:matches( ?MatchTable, { {Tid, '$1'}, $2 } ),
     NewT = T#tournament{ started = true,
 			 bracket = UpdatedBracket },
@@ -756,7 +756,9 @@ handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
 
 %% This is a wrapper that checks for a Yahtzee Bonus and scores it, regardless
 %% of what row the player wanted the turn scored in.
-updateScoreCard( ScoreCard, Row, ListOfDice ) ->
+updateScoreCard( ScoreCard, Row, FullListOfDice ) ->
+
+    ListOfDice = lists:sublist(FullListOfDice, 5), %% Grab the first 5 dice
     SortedDice = lists:sort( ListOfDice ),
     YahtzeeScore = lists:nth( 12, ScoreCard ),
     case isYahtzee(ListOfDice) of
@@ -771,6 +773,20 @@ updateScoreCard( ScoreCard, Row, ListOfDice ) ->
 	    end;
 	false -> updateScoreCard2( ScoreCard, Row, SortedDice )
     end.
+
+%% @spec scoreFullCard(P1ScoreCard) -> integer()
+%% @doc Find the total value of the player's scorecard, including
+%% the final scorecard bonus of 35 points
+scoreFullCard(P1ScoreCard) ->
+  FirstSixRowsScore = lists:sum(lists:sublist(P1ScoreCard, 6)),
+  RestOfScore = lists:sum(lists:sublist(P1ScoreCard, 7, 8)),
+  UpperSectionBonus = FirstSixRowsScore => 63,
+  case UpperSectionBonus of
+    true ->
+      FinalScore = FirstSixRowsScore + RestOfScore + 35;
+    false ->
+      FinalScore = FirstSixRowsScore + RestOfScore
+  end.
 
 
 %% For these delegated calls, we assume that the list of dice is given
