@@ -529,7 +529,7 @@ handle_gone_game(Tid, Gid, _Username, 1) ->
 
     case P2Win > (GamesPerMatch / 2) of
     	true ->
-    	    handle_match_over(Tid, P2, P1);
+    	    handle_match_over(Tid, Gid, P2, P1);
 
     	false ->
     	    %% Just make them lose the game
@@ -559,7 +559,7 @@ handle_gone_game(Tid, Gid, _Username, 2) ->
 
     case P1Win > (GamesPerMatch / 2) of
 	true ->
-	    handle_match_over(Tid, P1, P2);
+	    handle_match_over(Tid, Gid, P1, P2);
 
 	false ->
 	    %% Just make them lose the game
