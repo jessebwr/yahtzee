@@ -632,11 +632,13 @@ start_tournament(Tid, T) ->
 			     create_single_round_match([RoundOne], Tid);
 			 not OnlyOneRound ->
 			     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
+           %% Good news, as of 11:31 Saturday the code works as expected up until this next function call
 			     create_matches( Bracket, 0, Tid, RoundOne)
 		     end,
     
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
+    io:format("UpdatedBracket: ~p~n", [UpdatedBracket]),
     Matches = ets:match( ?MatchTable, { {Tid, '$1'}, $2 } ),
     io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
     NewT = T#tournament{ started = true,
@@ -669,7 +671,7 @@ initialize_later_rounds( Bracket, LaterRounds, NumRounds, NumRounds ) ->
 
 initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds ) 
   when CurrentRoundSize < MaxRounds ->
-    NextRound = lists:duplicate( math:pow(2, CurrentRoundSize), none ),
+    NextRound = lists:duplicate( round(math:pow(2, CurrentRoundSize)), none ),
     initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
 %% @spec handle_match_over(Tid, Gid, Winner, Loser) -> none()
@@ -695,7 +697,7 @@ handle_match_over(Tid, Gid, Winner, Loser) ->
 
     % make new match and send dice
     NewGid = make_ref(),
-    ets:insert(?MatchTable, {{Tid, NewGid}, #match{ }}) % shit, we need the new player from updating the brackets...
+    ets:insert(?MatchTable, {{Tid, NewGid}, #match{ }}). % shit, we need the new player from updating the brackets...
 
 %% @spec updateTournamentBracket(Tid, Winner) -> NewBracket
 %% @doc updates the structure of the tournament bracket
@@ -713,14 +715,14 @@ create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
-    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, [bye, SecondPlayer | RoundOne]);
+    create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne);
 
 create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
 						     p2 = SecondPlayer}}),
-    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, [FirstPlayer, SecondPlayer | RoundOne]).
+    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne).
 
 
 create_single_round_match( Bracket = [[bye, _PlayerTwo]], Tid ) ->
@@ -732,7 +734,8 @@ create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
 create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = PlayerOne,
-						     p2 = PlayerTwo }}).
+						     p2 = PlayerTwo }}),
+    [[PlayerOne, PlayerTwo]].
     
     
     
