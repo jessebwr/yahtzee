@@ -672,11 +672,11 @@ initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds )
     NextRound = lists:duplicate( math:pow(2, CurrentRoundSize), none ),
     initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
-%% @spec handle_match_over(Tid, P2, P1) -> none()
+%% @spec handle_match_over(Tid, Gid, P2, P1) -> none()
 %% @doc Once a player has won, or because the other player crashed and
 %% didn't log back in in time, update the tournament bracket, both
 %% user's win and loss records, and initiate a new match
-handle_match_over(Tid, P2, P1) ->
+handle_match_over(Tid, Gid, P2, P1) ->
     implementSOMETHINGHERE.
 
 
