@@ -637,7 +637,7 @@ start_tournament(Tid, T) ->
     
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
-    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, $2 } ),
+    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, '$2' } ),
     io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
     NewT = T#tournament{ started = true,
 			 bracket = UpdatedBracket },
@@ -729,7 +729,7 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
     P2 = M#match.p2,
 
     [{P1, {Pid1, _MonitorRef1, _LoginTicket1}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
-    [{P1, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
+    [{P2, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P2),
 
     P1DiceToSend = lists:sublist(M#match.p1ListOfDice, NumDiceToSendP1),
     P2DiceToSend = lists:sublist(M#match.p2ListOfDice, NumDiceToSendP2),
@@ -745,8 +745,9 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
 						 p1ListOfDice = P1NewBackups,
 						 p2ListOfDice = P2NewBackups}}),
 
-    %%{KEY, VALUE}
+    io:format( utils:timestamp() ++ "Sending message to p1 (pid ~p): ~p", [Pid1, P1Msg] ),
     Pid1 ! {play_request, self(), P1, P1Msg},
+    io:format( utils:timestamp() ++ "Sending message to p2 (pid ~p): ~p", [Pid2, P2Msg] ),
     Pid2 ! {play_request, self(), P2, P2Msg}.
 
 
