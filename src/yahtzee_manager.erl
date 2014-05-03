@@ -46,8 +46,7 @@
                 p2RollNum = 1,
                 p1Win = 0,
                 p2Win = 0,
-                currentGame = 1,
-		round
+                currentGame = 1
 	       }).
 
 -record(tournament, {bracket = [],
@@ -208,7 +207,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 		false ->
 		    %% Since they accepted, add them to the dictionary of players
-		    NewListOfPlayers = [ {Username, Pid} | T#tournament.listOfPlayers ],
+		    NewListOfPlayers = T#tournament.listOfPlayers ++ [Username],
 
 		    %% If we have enough players, start the tournament
 		    NumPlayersReplied = T#tournament.numPlayersReplied + 1,
@@ -335,21 +334,23 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 	    {noreply, S}
     end;
 
+
 %% %% Scoring move!  :(
 %% %% We don't care about DiceToKeep, since you can't reroll blindly (that is,
 %% %% you can't say "score it in this box after rerolling these dice" as a single
-%% %% move) and don't care about RollNum since we reset it here anyway
-%% handle_info({ play_action, _Pid, Username, {_Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine} }, S) ->
-%%     io:format(utils:timestamp() ++ ": received play_action message from ~p" ++
-%%                                 "with the following " ++
-%%                                 "info~nTid: ~p~n " ++
-%% 	                              "Gid: ~p~nRollNum: ~p~n " ++
-%% 	                              "DiceToKeep: ~p~nTid: ~p~n " ++
-%% 	                              "Scorecard Line: ~p~n",
+%% %% move) and don't care about RollNum since we rset it here anyway
+%% handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine} }, S) ->
+%%     io:format(utils:timestamp() ++ ": received play_action message from ~p 
+%%                                 with the following info~nTid: ~p~n
+%% 	      Gid: ~p~nRollNum: ~p~n
+%% 	      DiceToKeep: ~p~nTid: ~p~n
+%% 	      Scorecard Line: ~p~n",
 %%                         [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
-
-%%     %% First, let's update the score card stored in association with this match
 %%     case ets:lookup(?MatchTable, {Tid, Gid}) of
+%% 	[] ->
+%% 	    %% Invalid game that doesn't exist....  Ignore it since the protocol
+%% 	    %% doesn't specify any action
+%% 	    {noreply, S};
 %% 	[{Tid, Gid}, M] ->
 %% 	    P1 = M#match.p1,
 %% 	    P2 = M#match.p2,
@@ -359,70 +360,65 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %% 		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
 %% 						    ScoreCardLine,
 %% 						    M#match.p1ListOfDice ),
-%% 		    ClosedMatch = M#match{p1ScoreCard = NewScoreCard,
+%% 		    NewMatch = M#match{p1ScoreCard = NewScoreCard,
 %% 				       p1RollNum = 0},
-%% 		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch});
+%% 		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch});
 %% 		P2 ->
 %% 		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
 %% 						    ScoreCardLine,
 %% 						    M#match.p2ListOfDice ),
-%% 		    ClosedMatch = M#match{p2ScoreCard = NewScoreCard,
+%% 		    NewMatch = M#match{p2ScoreCard = NewScoreCard,
 %% 				       p2RollNum = 0},
-%% 		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch})
+%% 		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch})
 %% 	    end
 %%     end,
-
-%%     %% Then let's retrieve the updated match... and determine what to do with
-%%     %% the result of this game --- if this game is even over yet
-%%     %% (the 
 %%     NewMatch = ets:lookup(?MatchTable, {Tid, Gid}),
 %%     case NewMatch of
-%% 	#match{p1RollNum = 0, p2RollNum = 0, p1Win = P1Win, p2Win = P2Win,
-%% 	       p1 = P1, p2 = P2} ->
+%% 	#match{p1RollNum = 0, p2RollNum = 0, p1Win = P1Win, p2Win = P2Win} ->
 %% 	    %% Yup, the game ended.  We should determine the winner, etc.
 %% 	    Tournament = ets:lookup(?TournamentInfo, Tid),
 %% 	    MaxGames = Tournament#tournament.gamesPerMatch,
-%% 	    P1ScoreCard = NewMatch#match.p1ScoreCard,
-%% 	    P2ScoreCard = NewMatch#match.p2ScoreCard,
-%% 	    P1FinalScore = scoreFullCard(P1ScoreCard),
-%% 	    P2FinalScore = scoreFullCard(P2ScoreCard),
-%% 	    case true of
-%% 		true when P1FinalScore > P2FinalScore -> 
+%% 	    case NewMatch#match.{p1ScoreCard = P1ScoreCard, 
+%% 				 p2ScoreCard = P2ScoreCard} of
+%% 		_ when scoreFullCard(P1ScoreCard) > scoreFullCard(P2ScoreCard)
+%% 			  -> 
 %% 		    %% Now check if Player 1 won the match
 %% 		    case P1Win + 1 > MaxGames / 2 of
 %% 			true ->
-%% 			    %% Yup, the match is over, Player 1 won.
-%% 			    handle_match_over(Tid, P1, P2 );
+%% 			    % Yup, the match is over, Player 1 won.
+%% 			    ;
 %% 			false ->
-%% 			    %% Nope, start the next game.
+%% 			    % Nope, start the next game.
 %% 			    ets:delete(?MatchTable, {Tid, Gid}),
 %% 			    NewGid = make_ref(),
 %% 			    UpdatedMatch = newGameInMatch( NewMatch, 1 ),
 %% 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
 %% 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
 %% 		    end;
-%% 		true when P2FinalScore > P1FinalScore ->
+%% 		_ when scoreFullCard(P2ScoreCard) > scoreFullCard(P1ScoreCard)
+%% 		       ->
 %% 		    %% Now check if Player 2 won the match
 %% 		    case P2Win + 1 > MaxGames / 2 of
 %% 			true ->
-%% 			    %% Yup, the match is over, Player 2 won.
-%% 			    handle_match_over(Tid, P2, P1);
+%% 			    % Yup, the match is over, Player 2 won.
+%% 			    ;
 %% 			false ->
-%% 			    %% Nope, start the next game.
+%% 			    % Nope, start the next game.
 %% 			    ets:delete(?MatchTable, {Tid, Gid}),
 %% 			    NewGid = make_ref(),
 %% 			    UpdatedMatch = newGameInMatch( NewMatch, 2 ),
 %% 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
 %% 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
 %% 		    end;    
-%% 		true ->
+%% 		_ ->
 %% 		    %% OH NO A TIE
-%% 		    iMPLEMENTME
 %% 	    end;
 %% 	_ ->
 %% 	    %% Nope, haven't heard back from both players yet
 %% 	    {noreply, S}
 %%     end;
+	
+
 
 
 %%%%%%%%%%%%%%%% END RECEIVING MESSAGES SENT BY PLAYER %%%%%%%%%%%%%%%%%
@@ -616,7 +612,7 @@ shuffle(List, K) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%% Tournament Bracket Code %%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start_tournament(Tid, T) ->
-    ListOfPlayers = map( fun(elem) -> element(1, elem) end, T#tournament.listOfPlayers ),
+    ListOfPlayers = T#tournament.listOfPlayers,
     NumPlayers = length( ListOfPlayers ),
     NumByesNeeded = utils:nextPow2(NumPlayers) - NumPlayers,
 
@@ -630,25 +626,23 @@ start_tournament(Tid, T) ->
     %% However, if there are two or fewer total players in the tournament,
     %% there exists only one round so we have to handle that separately.
     OnlyOneRound = NumPlayers =< 2,
-    %% io:format( utils:timestamp() ++ ": Starting to make UpdatedBracket; OnlyOneRound is ~p~n", [OnlyOneRound] ),
+    io:format( utils:timestamp() ++ ": Starting to make UpdatedBracket; OnlyOneRound is ~p~n", [OnlyOneRound] ),
     UpdatedBracket = if 
 			 OnlyOneRound ->
 			     create_single_round_match([RoundOne], Tid);
 			 not OnlyOneRound ->
 			     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
 			     create_matches( Bracket, 0, Tid, RoundOne)
-		end,
+		     end,
     
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
-    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, '$2' } ),
-
+    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, $2 } ),
     io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
-
     NewT = T#tournament{ started = true,
 			 bracket = UpdatedBracket },
     ets:insert(?TournamentInfo, {Tid, NewT}),
-    %% io:format( utils:timestamp() ++ ": Calling start_matches~n" ),
+    io:format( utils:timestamp() ++ ": Calling start_matches~n" ),
     start_matches( Tid, Matches ),
     T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, ListOfPlayers, blah}}.
 
@@ -678,16 +672,12 @@ initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds )
     NextRound = lists:duplicate( math:pow(2, CurrentRoundSize), none ),
     initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
-%% @spec handle_match_over(Tid, Winner, Loser) -> none()
+%% @spec handle_match_over(Tid, P2, P1) -> none()
 %% @doc Once a player has won, or because the other player crashed and
 %% didn't log back in in time, update the tournament bracket, both
 %% user's win and loss records, and initiate a new match
-handle_match_over(Tid, Winner, Loser) ->
-    #tournament{bracket = Bracket, gamesPerMatch = GamesPerMatch,
-		playerList = PlayerList} =
-	ets:lookup(?TournamentInfo, Tid),
-    
-    
+handle_match_over(Tid, P2, P1) ->
+    implementSOMETHINGHERE.
 
 
 create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
@@ -696,27 +686,6 @@ create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
-
-    %% Handle starting a second-round match if needed
-    OpponentInd = if
-		      CurrMatchInd rem 2 == 0 ->
-			  CurrMatchInd - 1;
-		      CurrMatchInd rem 2 == 1 ->;
-			  CurrMatchInd + 1
-		  end,
-    Opponent = nth( OpponentInd, NewRoundTwo ),
-    case {SecondPlayer, Opponent} of
-	{bye, _} ->
-	    ok;
-	{_, bye} ->
-	    ok;
-	{PlayerOne, PlayerTwo} ->
-	    GameRef = make_ref(),
-	    ets:insert(?MatchTable, {{Tid, GameRef}, #match{p1=PlayerOne,
-							    p2=PlayerTwo}})
-    end,
-
-    %% And continue recursing on the first round
     create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, [bye, SecondPlayer | RoundOne]);
 
 create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
@@ -726,7 +695,8 @@ create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRoun
 						     p2 = SecondPlayer}}),
     create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, [FirstPlayer, SecondPlayer | RoundOne]).
 
-create_single_round_match( Bracket = [[bye, _PlayerTwo]], _Tid ) ->
+
+create_single_round_match( Bracket = [[bye, _PlayerTwo]], Tid ) ->
     Bracket;
 
 create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
@@ -737,6 +707,9 @@ create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = PlayerOne,
 						     p2 = PlayerTwo }}).
     
+    
+    
+
 
 start_matches( _, [] ) ->
     ok;
@@ -756,7 +729,7 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
     P2 = M#match.p2,
 
     [{P1, {Pid1, _MonitorRef1, _LoginTicket1}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
-    [{P2, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P2),
+    [{P1, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
 
     P1DiceToSend = lists:sublist(M#match.p1ListOfDice, NumDiceToSendP1),
     P2DiceToSend = lists:sublist(M#match.p2ListOfDice, NumDiceToSendP2),
@@ -772,9 +745,8 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
 						 p1ListOfDice = P1NewBackups,
 						 p2ListOfDice = P2NewBackups}}),
 
-    io:format( utils:timestamp() ++ ": sending message to p1 (pid ~p): ~p~n", [Pid1, P1Msg] ),
+    %%{KEY, VALUE}
     Pid1 ! {play_request, self(), P1, P1Msg},
-    io:format( utils:timestamp() ++ ": sending message to p2 (pid ~p): ~p~n", [Pid2, P2Msg] ),
     Pid2 ! {play_request, self(), P2, P2Msg}.
 
 
@@ -793,38 +765,23 @@ handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
 
 %% This is a wrapper that checks for a Yahtzee Bonus and scores it, regardless
 %% of what row the player wanted the turn scored in.
-updateScoreCard( ScoreCard, Row, FullListOfDice ) ->
-
-    ListOfDice = lists:sublist(FullListOfDice, 5), %% Grab the first 5 dice
-    SortedDice = lists:sort( ListOfDice ),
-    YahtzeeScore = lists:nth( 12, ScoreCard ),
-    case isYahtzee(ListOfDice) of
-	true ->
-	    case YahtzeeScore of
-		0 ->
-		    updateScoreCard2( ScoreCard, Row, SortedDice );
-		50  ->
-		    YahtzBonus = lists:nth( 14, ScoreCard ),
-		    NewCard = utils:set_list_index( ScoreCard, 14, YahtzBonus + 100 ),
-		    updateScoreCard2( NewCard, Row, SortedDice )
-	    end;
-	false -> updateScoreCard2( ScoreCard, Row, SortedDice )
-    end.
-
-%% @spec scoreFullCard(P1ScoreCard) -> integer()
-%% @doc Find the total value of the player's scorecard, including
-%% the final scorecard bonus of 35 points
-scoreFullCard(P1ScoreCard) ->
-  FirstSixRowsScore = lists:sum(lists:sublist(P1ScoreCard, 6)),
-  RestOfScore = lists:sum(lists:sublist(P1ScoreCard, 7, 8)),
-  UpperSectionBonus = FirstSixRowsScore >= 63,
-  case UpperSectionBonus of
+updateScoreCard( ScoreCard, Row, ListOfDice ) ->
+  SortedDice = lists:sort( ListOfDice ),
+  YahtzeeScore = lists:nth( 12, ScoreCard ),
+  case isYahtzee(ListOfDice) of
     true ->
-      FinalScore = FirstSixRowsScore + RestOfScore + 35;
-    false ->
-      FinalScore = FirstSixRowsScore + RestOfScore
-  end,
-  FinalScore.
+      case YahtzeeScore of
+        0 ->
+          updateScoreCard2( ScoreCard, Row, SortedDice );
+        -1 ->
+          updateScoreCard2( ScoreCard, Row, SortedDice );
+        50  ->
+          YahtzBonus = lists:nth( 14, ScoreCard ),
+          NewCard = utils:set_list_index( ScoreCard, 14, YahtzBonus + 100 ),
+          updateScoreCard2( NewCard, Row, SortedDice )
+      end;
+    false -> updateScoreCard2( ScoreCard, Row, SortedDice )
+  end.
 
 
 %% For these delegated calls, we assume that the list of dice is given
@@ -886,67 +843,65 @@ isYahtzee( _ ) ->
 %% For the top half (i.e. the first 6 boxes), just count
 updateScoreCard2( ScoreCard, Row, ListOfDice ) 
   when Row > 0, Row =< 6 ->
-    utils:set_list_index(ScoreCard, Row, utils:count(ListOfDice, Row) );
+    utils:set_list_index(ScoreCard, Row, Row*utils:count(ListOfDice, Row) );
 
 %% Three of a kind
 updateScoreCard2( ScoreCard, 7, ListOfDice ) ->
-    case isThreeOfAKind( ListOfDice ) of
-	true ->
-	    utils:set_list_index( ScoreCard, 7, lists:sum( ListOfDice ) );
-	false ->
-	    utils:set_list_index( ScoreCard, 7, 0 )
-    end;
+  case isThreeOfAKind( ListOfDice ) of
+    true ->
+      utils:set_list_index( ScoreCard, 7, lists:sum( ListOfDice ) );
+    false ->
+      utils:set_list_index( ScoreCard, 7, 0 )
+  end;
 
 %% Four of a kind
 updateScoreCard2( ScoreCard, 8, ListOfDice ) ->
     case isFourOfAKind( ListOfDice ) of
-	true ->
-	    utils:set_list_index( ScoreCard, 8, lists:sum( ListOfDice ) );
-	false ->
-	    utils:set_list_index( ScoreCard, 8, 0 )
+  true ->
+      utils:set_list_index( ScoreCard, 8, lists:sum( ListOfDice ) );
+  false ->
+      utils:set_list_index( ScoreCard, 8, 0 )
     end;
 
 %% Full House
 updateScoreCard2( ScoreCard, 9, ListOfDice ) ->
     case isFullHouse( ListOfDice ) of
-	true ->
-	    utils:set_list_index( ScoreCard, 9, lists:sum( ListOfDice ) );
-	false ->
-	    utils:set_list_index( ScoreCard, 9, 0 )
+  true ->
+      utils:set_list_index( ScoreCard, 9, 25 );
+  false ->
+      utils:set_list_index( ScoreCard, 9, 0 )
     end;
 
 %% Small Straight
 updateScoreCard2( ScoreCard, 10, ListOfDice ) ->
     case isSmallStraight( ListOfDice ) of
-	true ->
-	    utils:set_list_index( ScoreCard, 10, 30 );
-	false ->
-	    utils:set_list_index( ScoreCard, 10, 0 )
+  true ->
+      utils:set_list_index( ScoreCard, 10, 30 );
+  false ->
+      utils:set_list_index( ScoreCard, 10, 0 )
     end;
 
 %% Large Straight
 updateScoreCard2( ScoreCard, 11, ListOfDice ) ->
     case isLargeStraight( ListOfDice ) of
-	true ->
-	    utils:set_list_index( ScoreCard, 11, 40 );
-	false ->
-	    utils:set_list_index( ScoreCard, 11, 0 )
+  true ->
+      utils:set_list_index( ScoreCard, 11, 40 );
+  false ->
+      utils:set_list_index( ScoreCard, 11, 0 )
     end;
 
 %% Yahtzee
 updateScoreCard2( ScoreCard, 12, ListOfDice ) ->
     case isYahtzee( ListOfDice ) of
-	true ->
-	    utils:set_list_index( ScoreCard, 12, 50 );
-	false ->
-	    utils:set_list_index( ScoreCard, 12, 0 )
+  true ->
+      utils:set_list_index( ScoreCard, 12, 50 );
+  false ->
+      utils:set_list_index( ScoreCard, 12, 0 )
     end;
 
 %% Chance
 updateScoreCard2( ScoreCard, 13, ListOfDice ) ->
-    utils:set_list_index( ScoreCard, 9, lists:sum( ListOfDice ) ).
-
-
+    utils:set_list_index( ScoreCard, 13, lists:sum( ListOfDice ) ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% END SCORING FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -971,9 +926,6 @@ updateDiceList( [FirstDie|RestDice], [FirstToKeep|RestToKeep], NumDiceToSend, []
 
 updateDiceList( [FirstDie|RestDice], [], NumDiceToSend, DiceToSend ) ->
     updateDiceList( RestDice, [], NumDiceToSend - 1, [FirstDie|DiceToSend] ).
-
-
-
 
 
 newGameInMatch( M, 1 ) ->
