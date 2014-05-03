@@ -626,7 +626,7 @@ start_tournament(Tid, T) ->
     %% However, if there are two or fewer total players in the tournament,
     %% there exists only one round so we have to handle that separately.
     OnlyOneRound = NumPlayers =< 2,
-    io:format( utils:timestamp() ++ ": Starting to make UpdatedBracket; OnlyOneRound is ~p~n", [OnlyOneRound] ),
+    %% io:format( utils:timestamp() ++ ": Starting to make UpdatedBracket; OnlyOneRound is ~p~n", [OnlyOneRound] ),
     UpdatedBracket = if 
 			 OnlyOneRound ->
 			     create_single_round_match([RoundOne], Tid);
@@ -638,11 +638,11 @@ start_tournament(Tid, T) ->
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
     Matches = ets:match( ?MatchTable, { {Tid, '$1'}, '$2' } ),
-    io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
+    %% io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
     NewT = T#tournament{ started = true,
 			 bracket = UpdatedBracket },
     ets:insert(?TournamentInfo, {Tid, NewT}),
-    io:format( utils:timestamp() ++ ": Calling start_matches~n" ),
+    %% io:format( utils:timestamp() ++ ": Calling start_matches~n" ),
     start_matches( Tid, Matches ),
     T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, ListOfPlayers, blah}}.
 
@@ -705,9 +705,7 @@ create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
 create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = PlayerOne,
-						     p2 = PlayerTwo }}).
-    
-    
+						     p2 = PlayerTwo }}).    
     
 
 
