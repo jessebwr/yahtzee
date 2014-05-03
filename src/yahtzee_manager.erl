@@ -338,7 +338,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %% We don't care about DiceToKeep, since you can't reroll blindly (that is,
 %% you can't say "score it in this box after rerolling these dice" as a single
 %% move) and don't care about RollNum since we rset it here anyway
-handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine} }, S) ->
+handle_info({ play_action, _Pid, Username, {_Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine} }, S) ->
     io:format(utils:timestamp() ++ ": received play_action message from ~p" ++
                                 "with the following " ++
                                 "info~nTid: ~p~n " ++
@@ -347,10 +347,6 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 	                              "Scorecard Line: ~p~n",
                         [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
     case ets:lookup(?MatchTable, {Tid, Gid}) of
-	[] ->
-	    %% Invalid game that doesn't exist....  Ignore it since the protocol
-	    %% doesn't specify any action
-	    {noreply, S};
 	[{Tid, Gid}, M] ->
 	    P1 = M#match.p1,
 	    P2 = M#match.p2,
@@ -360,16 +356,16 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
 						    ScoreCardLine,
 						    M#match.p1ListOfDice ),
-		    NewMatch = M#match{p1ScoreCard = NewScoreCard,
+		    ClosedMatch = M#match{p1ScoreCard = NewScoreCard,
 				       p1RollNum = 0},
-		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch});
+		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch});
 		P2 ->
 		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
 						    ScoreCardLine,
 						    M#match.p2ListOfDice ),
-		    NewMatch = M#match{p2ScoreCard = NewScoreCard,
+		    ClosedMatch = M#match{p2ScoreCard = NewScoreCard,
 				       p2RollNum = 0},
-		    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch})
+		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch})
 	    end
     end,
     NewMatch = ets:lookup(?MatchTable, {Tid, Gid}),
@@ -380,12 +376,10 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 	    MaxGames = Tournament#tournament.gamesPerMatch,
       P1ScoreCard = NewMatch#match.p1ScoreCard,
       P2ScoreCard = NewMatch#match.p2ScoreCard,
-      % P1FinalScore = scoreFullCard(P1ScoreCard),
-      % P2FinalScore = scoreFullCard(P2ScoreCard),
-      % case 
+      P1FinalScore = scoreFullCard(P1ScoreCard),
+      P2FinalScore = scoreFullCard(P2ScoreCard),
 	    case true of
-		true when scoreFullCard(P1ScoreCard) > scoreFullCard(P2ScoreCard)
-			  -> 
+		_ when P1FinalScore > P2FinalScore -> 
 		    %% Now check if Player 1 won the match
 		    case P1Win + 1 > MaxGames / 2 of
 			true ->
@@ -399,8 +393,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
 		    end;
-		true when scoreFullCard(P2ScoreCard) > scoreFullCard(P1ScoreCard)
-		       ->
+		_ when P2FinalScore > P1FinalScore ->
 		    %% Now check if Player 2 won the match
 		    case P2Win + 1 > MaxGames / 2 of
 			true ->
@@ -414,9 +407,9 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, S
 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
 		    end;    
-		true ->
-        iMPLEMENTME
+		_ ->
 		    %% OH NO A TIE
+        iMPLEMENTME
 	    end;
 	_ ->
 	    %% Nope, haven't heard back from both players yet
@@ -636,7 +629,7 @@ start_tournament(Tid, T) ->
 			 not OnlyOneRound ->
 			     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
 			     create_matches( Bracket, 0, Tid, RoundOne)
-		     end,
+		end,
     
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
@@ -700,7 +693,7 @@ create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRoun
     create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, [FirstPlayer, SecondPlayer | RoundOne]).
 
 
-create_single_round_match( Bracket = [[bye, _PlayerTwo]], Tid ) ->
+create_single_round_match( Bracket = [[bye, _PlayerTwo]], _Tid ) ->
     Bracket;
 
 create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
@@ -794,13 +787,14 @@ updateScoreCard( ScoreCard, Row, FullListOfDice ) ->
 scoreFullCard(P1ScoreCard) ->
   FirstSixRowsScore = lists:sum(lists:sublist(P1ScoreCard, 6)),
   RestOfScore = lists:sum(lists:sublist(P1ScoreCard, 7, 8)),
-  UpperSectionBonus = FirstSixRowsScore => 63,
+  UpperSectionBonus = FirstSixRowsScore >= 63,
   case UpperSectionBonus of
     true ->
       FinalScore = FirstSixRowsScore + RestOfScore + 35;
     false ->
       FinalScore = FirstSixRowsScore + RestOfScore
-  end.
+  end,
+  FinalScore.
 
 
 %% For these delegated calls, we assume that the list of dice is given
