@@ -672,12 +672,39 @@ initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds )
     NextRound = lists:duplicate( math:pow(2, CurrentRoundSize), none ),
     initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
-%% @spec handle_match_over(Tid, Gid, P2, P1) -> none()
-%% @doc Once a player has won, or because the other player crashed and
-%% didn't log back in in time, update the tournament bracket, both
-%% user's win and loss records, and initiate a new match
-handle_match_over(Tid, Gid, P2, P1) ->
-    implementSOMETHINGHERE.
+%% @spec handle_match_over(Tid, Gid, Winner, Loser) -> none()
+%% @doc Winner and Loser are both players. 
+%% Once a player has won, or because the other player crashed and
+%% didn't log back in in time, update each player's wins and losses,
+%% delete the old match, update the tournament bracket, and
+%% create and send out the messages for a new match
+handle_match_over(Tid, Gid, Winner, Loser) ->
+    % update wins and losses
+    [{Winner, WinnerInfo}] = ets:lookup(?UserInfo, Winner),
+    [{Loser, LoserInfo}] = ets:lookup(?UserInfo, Loser),
+    ets:insert(?UserInfo, {Winner, WinnerInfo#user{match_wins =
+                                           WinnerInfo#user.match_wins + 1}}),
+    ets:insert(?UserInfo, {Loser, LoserInfo#user{match_losses =
+                                           LoserInfo#user.match_losses + 1}}),
+
+    % delete the old match
+    ets:delete(?MatchTable, {Tid, Gid}),
+
+    % update tournament bracket with new winner
+    NewBracket = updateTournamentBracket(Tid, Winner),
+
+    % make new match and send dice
+    NewGid = make_ref(),
+    ets:insert(?MatchTable, {{Tid, NewGid}, #match{ }}) % shit, we need the new player from updating the brackets...
+
+%% @spec updateTournamentBracket(Tid, Winner) -> NewBracket
+%% @doc updates the structure of the tournament bracket
+%% as a result of a match ending. The old round must have
+%% the two player's positions set to none, and the
+%% new round must have the new player's username in the
+%% correct position
+updateTournamentBracket(Tid, Winner) ->
+    [].
 
 
 create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
@@ -758,6 +785,7 @@ handle_ask_player(ChosenPlayer, {Pid, _MonitorRef, LoginTicket}, Tid) ->
     {ok, TimerRef} = timer:send_after(60000, {reject_tournament, Pid, ChosenPlayer, {Tid, LoginTicket}}),
     ets:insert(?TimeOutRefs, {{ChosenPlayer, Tid}, TimerRef}),
     ok.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Actually score a turn! %%%%%%%%%%%%%%%%%%%%%%%%%%%%
