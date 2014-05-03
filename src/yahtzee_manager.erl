@@ -46,7 +46,8 @@
                 p2RollNum = 1,
                 p1Win = 0,
                 p2Win = 0,
-                currentGame = 1
+                currentGame = 1,
+		round
 	       }).
 
 -record(tournament, {bracket = [],
@@ -207,7 +208,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 		false ->
 		    %% Since they accepted, add them to the dictionary of players
-		    NewListOfPlayers = T#tournament.listOfPlayers ++ [Username],
+		    NewListOfPlayers = [ {Username, Pid} | T#tournament.listOfPlayers ],
 
 		    %% If we have enough players, start the tournament
 		    NumPlayersReplied = T#tournament.numPlayersReplied + 1,
@@ -334,87 +335,94 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 	    {noreply, S}
     end;
 
-%% Scoring move!  :(
-%% We don't care about DiceToKeep, since you can't reroll blindly (that is,
-%% you can't say "score it in this box after rerolling these dice" as a single
-%% move) and don't care about RollNum since we rset it here anyway
-handle_info({ play_action, _Pid, Username, {_Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine} }, S) ->
-    io:format(utils:timestamp() ++ ": received play_action message from ~p" ++
-                                "with the following " ++
-                                "info~nTid: ~p~n " ++
-	                              "Gid: ~p~nRollNum: ~p~n " ++
-	                              "DiceToKeep: ~p~nTid: ~p~n " ++
-	                              "Scorecard Line: ~p~n",
-                        [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
-    case ets:lookup(?MatchTable, {Tid, Gid}) of
-	[{Tid, Gid}, M] ->
-	    P1 = M#match.p1,
-	    P2 = M#match.p2,
+%% %% Scoring move!  :(
+%% %% We don't care about DiceToKeep, since you can't reroll blindly (that is,
+%% %% you can't say "score it in this box after rerolling these dice" as a single
+%% %% move) and don't care about RollNum since we reset it here anyway
+%% handle_info({ play_action, _Pid, Username, {_Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine} }, S) ->
+%%     io:format(utils:timestamp() ++ ": received play_action message from ~p" ++
+%%                                 "with the following " ++
+%%                                 "info~nTid: ~p~n " ++
+%% 	                              "Gid: ~p~nRollNum: ~p~n " ++
+%% 	                              "DiceToKeep: ~p~nTid: ~p~n " ++
+%% 	                              "Scorecard Line: ~p~n",
+%%                         [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
 
-	    case Username of
-		P1 ->
-		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
-						    ScoreCardLine,
-						    M#match.p1ListOfDice ),
-		    ClosedMatch = M#match{p1ScoreCard = NewScoreCard,
-				       p1RollNum = 0},
-		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch});
-		P2 ->
-		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
-						    ScoreCardLine,
-						    M#match.p2ListOfDice ),
-		    ClosedMatch = M#match{p2ScoreCard = NewScoreCard,
-				       p2RollNum = 0},
-		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch})
-	    end
-    end,
-    NewMatch = ets:lookup(?MatchTable, {Tid, Gid}),
-    case NewMatch of
-	#match{p1RollNum = 0, p2RollNum = 0, p1Win = P1Win, p2Win = P2Win} ->
-	    %% Yup, the game ended.  We should determine the winner, etc.
-	    Tournament = ets:lookup(?TournamentInfo, Tid),
-	    MaxGames = Tournament#tournament.gamesPerMatch,
-      P1ScoreCard = NewMatch#match.p1ScoreCard,
-      P2ScoreCard = NewMatch#match.p2ScoreCard,
-      P1FinalScore = scoreFullCard(P1ScoreCard),
-      P2FinalScore = scoreFullCard(P2ScoreCard),
-	    case true of
-		_ when P1FinalScore > P2FinalScore -> 
-		    %% Now check if Player 1 won the match
-		    case P1Win + 1 > MaxGames / 2 of
-			true ->
-          % Yup, the match is over, Player 1 won.
-          iMPLEMENTME;
-			false ->
-			    % Nope, start the next game.
-			    ets:delete(?MatchTable, {Tid, Gid}),
-			    NewGid = make_ref(),
-			    UpdatedMatch = newGameInMatch( NewMatch, 1 ),
-			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
-			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
-		    end;
-		_ when P2FinalScore > P1FinalScore ->
-		    %% Now check if Player 2 won the match
-		    case P2Win + 1 > MaxGames / 2 of
-			true ->
-			    % Yup, the match is over, Player 2 won.
-          iMPLEMENTME;
-			false ->
-			    % Nope, start the next game.
-			    ets:delete(?MatchTable, {Tid, Gid}),
-			    NewGid = make_ref(),
-			    UpdatedMatch = newGameInMatch( NewMatch, 2 ),
-			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
-			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
-		    end;    
-		_ ->
-		    %% OH NO A TIE
-        iMPLEMENTME
-	    end;
-	_ ->
-	    %% Nope, haven't heard back from both players yet
-	    {noreply, S}
-    end;
+%%     %% First, let's update the score card stored in association with this match
+%%     case ets:lookup(?MatchTable, {Tid, Gid}) of
+%% 	[{Tid, Gid}, M] ->
+%% 	    P1 = M#match.p1,
+%% 	    P2 = M#match.p2,
+
+%% 	    case Username of
+%% 		P1 ->
+%% 		    NewScoreCard = updateScoreCard( M#match.p1ScoreCard,
+%% 						    ScoreCardLine,
+%% 						    M#match.p1ListOfDice ),
+%% 		    ClosedMatch = M#match{p1ScoreCard = NewScoreCard,
+%% 				       p1RollNum = 0},
+%% 		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch});
+%% 		P2 ->
+%% 		    NewScoreCard = updateScoreCard( M#match.p2ScoreCard,
+%% 						    ScoreCardLine,
+%% 						    M#match.p2ListOfDice ),
+%% 		    ClosedMatch = M#match{p2ScoreCard = NewScoreCard,
+%% 				       p2RollNum = 0},
+%% 		    ets:insert(?MatchTable, {{Tid, Gid}, ClosedMatch})
+%% 	    end
+%%     end,
+
+%%     %% Then let's retrieve the updated match... and determine what to do with
+%%     %% the result of this game --- if this game is even over yet
+%%     %% (the 
+%%     NewMatch = ets:lookup(?MatchTable, {Tid, Gid}),
+%%     case NewMatch of
+%% 	#match{p1RollNum = 0, p2RollNum = 0, p1Win = P1Win, p2Win = P2Win,
+%% 	       p1 = P1, p2 = P2} ->
+%% 	    %% Yup, the game ended.  We should determine the winner, etc.
+%% 	    Tournament = ets:lookup(?TournamentInfo, Tid),
+%% 	    MaxGames = Tournament#tournament.gamesPerMatch,
+%% 	    P1ScoreCard = NewMatch#match.p1ScoreCard,
+%% 	    P2ScoreCard = NewMatch#match.p2ScoreCard,
+%% 	    P1FinalScore = scoreFullCard(P1ScoreCard),
+%% 	    P2FinalScore = scoreFullCard(P2ScoreCard),
+%% 	    case true of
+%% 		true when P1FinalScore > P2FinalScore -> 
+%% 		    %% Now check if Player 1 won the match
+%% 		    case P1Win + 1 > MaxGames / 2 of
+%% 			true ->
+%% 			    %% Yup, the match is over, Player 1 won.
+%% 			    handle_match_over(Tid, P1, P2 );
+%% 			false ->
+%% 			    %% Nope, start the next game.
+%% 			    ets:delete(?MatchTable, {Tid, Gid}),
+%% 			    NewGid = make_ref(),
+%% 			    UpdatedMatch = newGameInMatch( NewMatch, 1 ),
+%% 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
+%% 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
+%% 		    end;
+%% 		true when P2FinalScore > P1FinalScore ->
+%% 		    %% Now check if Player 2 won the match
+%% 		    case P2Win + 1 > MaxGames / 2 of
+%% 			true ->
+%% 			    %% Yup, the match is over, Player 2 won.
+%% 			    handle_match_over(Tid, P2, P1);
+%% 			false ->
+%% 			    %% Nope, start the next game.
+%% 			    ets:delete(?MatchTable, {Tid, Gid}),
+%% 			    NewGid = make_ref(),
+%% 			    UpdatedMatch = newGameInMatch( NewMatch, 2 ),
+%% 			    ets:insert(?MatchTable, {{Tid, NewGid}, UpdatedMatch}),
+%% 			    sendDice( Tid, NewGid, UpdatedMatch, 5, 5 )
+%% 		    end;    
+%% 		true ->
+%% 		    %% OH NO A TIE
+%% 		    iMPLEMENTME
+%% 	    end;
+%% 	_ ->
+%% 	    %% Nope, haven't heard back from both players yet
+%% 	    {noreply, S}
+%%     end;
 
 
 %%%%%%%%%%%%%%%% END RECEIVING MESSAGES SENT BY PLAYER %%%%%%%%%%%%%%%%%
@@ -608,7 +616,7 @@ shuffle(List, K) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%% Tournament Bracket Code %%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start_tournament(Tid, T) ->
-    ListOfPlayers = T#tournament.listOfPlayers,
+    ListOfPlayers = map( fun(elem) -> element(1, elem) end, T#tournament.listOfPlayers ),
     NumPlayers = length( ListOfPlayers ),
     NumByesNeeded = utils:nextPow2(NumPlayers) - NumPlayers,
 
@@ -670,12 +678,16 @@ initialize_later_rounds( Bracket, LaterRounds, CurrentRoundSize, MaxRounds )
     NextRound = lists:duplicate( math:pow(2, CurrentRoundSize), none ),
     initialize_later_rounds( Bracket, [NextRound | LaterRounds], CurrentRoundSize + 1, MaxRounds).
 
-%% @spec handle_match_over(Tid, P2, P1) -> none()
+%% @spec handle_match_over(Tid, Winner, Loser) -> none()
 %% @doc Once a player has won, or because the other player crashed and
 %% didn't log back in in time, update the tournament bracket, both
 %% user's win and loss records, and initiate a new match
-handle_match_over(Tid, P2, P1) ->
-    implementSOMETHINGHERE.
+handle_match_over(Tid, Winner, Loser) ->
+    #tournament{bracket = Bracket, gamesPerMatch = GamesPerMatch,
+		playerList = PlayerList} =
+	ets:lookup(?TournamentInfo, Tid),
+    
+    
 
 
 create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
@@ -684,6 +696,27 @@ create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
+
+    %% Handle starting a second-round match if needed
+    OpponentInd = if
+		      CurrMatchInd rem 2 == 0 ->
+			  CurrMatchInd - 1;
+		      CurrMatchInd rem 2 == 1 ->;
+			  CurrMatchInd + 1
+		  end,
+    Opponent = nth( OpponentInd, NewRoundTwo ),
+    case {SecondPlayer, Opponent} of
+	{bye, _} ->
+	    ok;
+	{_, bye} ->
+	    ok;
+	{PlayerOne, PlayerTwo} ->
+	    GameRef = make_ref(),
+	    ets:insert(?MatchTable, {{Tid, GameRef}, #match{p1=PlayerOne,
+							    p2=PlayerTwo}})
+    end,
+
+    %% And continue recursing on the first round
     create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, [bye, SecondPlayer | RoundOne]);
 
 create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
@@ -692,7 +725,6 @@ create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRoun
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
 						     p2 = SecondPlayer}}),
     create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, [FirstPlayer, SecondPlayer | RoundOne]).
-
 
 create_single_round_match( Bracket = [[bye, _PlayerTwo]], _Tid ) ->
     Bracket;
@@ -703,9 +735,8 @@ create_single_round_match( Bracket = [[_PlayerOne, bye]], d ) ->
 create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = PlayerOne,
-						     p2 = PlayerTwo }}).    
+						     p2 = PlayerTwo }}).
     
-
 
 start_matches( _, [] ) ->
     ok;
@@ -940,6 +971,9 @@ updateDiceList( [FirstDie|RestDice], [FirstToKeep|RestToKeep], NumDiceToSend, []
 
 updateDiceList( [FirstDie|RestDice], [], NumDiceToSend, DiceToSend ) ->
     updateDiceList( RestDice, [], NumDiceToSend - 1, [FirstDie|DiceToSend] ).
+
+
+
 
 
 newGameInMatch( M, 1 ) ->
