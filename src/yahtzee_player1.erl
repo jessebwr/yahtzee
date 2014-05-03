@@ -93,6 +93,9 @@
 %%%============================================================================
 
 main(Params) ->
+  % Return = yahtzee_chooser:decide_choice([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0]
+  %   , [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0], 1, [1,2,3,4,5]),
+  % io:format("Jesse made: ~p~n", [Return]),
   NodeName = hd(Params),
   Username = hd(tl(Params)),
   Password = hd(tl(tl(Params))),
@@ -114,7 +117,6 @@ main(Params) ->
 %%% GenServer Callbacks 
 %%%============================================================================
 
-%% @spec init({NodesToConnectTo}) -> {ok, State}.
 init({Username, Password, TournamentManagerNames}) ->
   login_to_managers(TournamentManagerNames, Username, Password),
   {ok, #state{username = Username,
@@ -255,6 +257,7 @@ terminate(_Reason, _State) ->
 
 %% REALLY SILLY AI IMPLEMENTATION, MAKE THIS BETTER!
 playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) ->
+  % yahtzee_chooser:decide_choice(Scorecard, OpponentsScorecard, RollNumber, Dice).
   {[true, true, true, true, true], 1}.
     
 
