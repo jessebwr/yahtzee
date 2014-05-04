@@ -377,6 +377,7 @@ handle_info( {play_action, _Pid, Username,
 	[] ->
 	    %% Invalid game that doesn't exist....  Ignore it since the protocol
 	    %% doesn't specify any action
+	    io:format("Unrecognized game~n"),
 	    ok;
 
 	[{{Tid, Gid}, Match = #match{p1 = Username,
@@ -424,6 +425,7 @@ handle_info( {play_action, _Pid, Username,
         			    end; %% case p2RollNum
 
 			false ->
+			    io:format("Player 1 is done with the game~n"),
 			    %% Player 1 is now done with this game.  Is Player 2?
 			    case lists:member(-1, P2ScoreCard) of
     				false ->
@@ -631,7 +633,6 @@ handle_info(MSG, S) ->
     io:format(utils:timestamp() ++ ": not recognized message: ~p~n", [MSG]),
     {noreply, S}.
 
-%% TODO: actually implement
 kick_out_cheater( Username ) ->
     NewUser = #user{password = cheater},
     ets:insert(?UserInfo, {Username, NewUser}),
