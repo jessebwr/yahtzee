@@ -278,11 +278,11 @@ int sum(std::vector<int> v){
 // because the probability of getting any one of these as the game goes on
 // decreases over each turn.
 
-// const std::vector<double> heuristicVector {1.5, 5.5, 8.9, 
-//                                            12.0, 15.5, 19.0, 
-//                                            22.0, 13.0, 22.5, 
-//                                            29.0,33.0, 17.0, 
-//                                            22.0};
+const std::vector<double> heuristicVector {1.5, 5.2, 8.5, 
+                                           12.0, 15.5, 19.0, 
+                                           22.0, 13.0, 22.5, 
+                                           29.0,33.0, 17.0, 
+                                           22.0};
 
 // const std::vector<double> heuristicVector {1.5, 4.5, 8.0, 
 //                                            11.0, 15.5, 18.0, 
@@ -291,33 +291,43 @@ int sum(std::vector<int> v){
 //                                            21.0};
 
 
-const std::vector<double> heuristicVector {1.5, 4.5, 8.0, 
-                                           11.0, 15.5, 18.0, 
-                                           18.0, 10.0, 20.5, 
-                                           24.0, 29.0, 10.0, 
-                                           21.0};
+const std::vector<double> decayVector{1.0284, 0.9823, 0.9753,
+                                      0.9710, 0.9683, 0.96654,
+                                      0.9696, 0.9324, 0.9278,
+                                      0.96315, 0.90977, 0.8465,
+                                      1.0049};
 
-const std::vector<double> decayVector{1.0, 1.0, 1.0,
-                                      1.0, 1.0, 1.0,
-                                      0.97, 0.95, 0.95,
-                                      0.97, 0.95, 0.93,
-                                      1.0};
+// const std::vector<double> decayVector{1, 1, 1,
+//                                       1, 1, 1,
+//                                       1, 1, 1,
+//                                       1, 1, 1,
+//                                       1};
+
+std::vector<double> getHeuristicVectorGivenTurn(int turn){
+  std::vector<double> newHeuristicVector;
+  int mult = turn - 1;
+  for (int i = 0; i < 13; i++){
+    newHeuristicVector.push_back(heuristicVector[i]*pow(decayVector[i], mult));
+  }
+  return newHeuristicVector;
+}
      
-double expectedValueOfFiveDice(Dice dice){
+double expectedValueOfFiveDice(Dice dice, int turn){
   double value = 0;
-  double heuristicSum = sum(heuristicVector);
+  std::vector<double> turnHeuristicVector = getHeuristicVectorGivenTurn(turn);
+  double heuristicSum = sum(turnHeuristicVector);
   for (int i = 1; i <= 13; i++){
-    value += (heuristicSum + dice.getValueForChoice(i) - heuristicVector[i-1]);
+    value += (heuristicSum + dice.getValueForChoice(i) - turnHeuristicVector[i-1]);
   }
   return value/13;
 }
 
 
-std::vector<double> expectedValuesOfArrayOfDice(std::vector<std::vector<int>> permutations){
+std::vector<double> expectedValuesOfArrayOfDice(std::vector<std::vector<int>> permutations, int turn){
   std::vector<double> heuristicEV;
   for(int i = 0; i < 252; i++){
     Dice tempDice(permutations[i]);
-    heuristicEV[i] = expectedValueOfFiveDice(tempDice);
+    heuristicEV[i] = expectedValueOfFiveDice(tempDice, turn);
   }
   return heuristicEV;
 }
@@ -390,7 +400,7 @@ double permProb(std::vector<int> permutation){
 }
 
 
-double EVdiceKept(std::vector<int> diceKept){
+double EVdiceKept(std::vector<int> diceKept, int turn){
   std::vector<std::vector<int>> possibleReplacements;
   int size = diceKept.size();
   double ev = 0;
@@ -419,7 +429,7 @@ double EVdiceKept(std::vector<int> diceKept){
     combinedDice.insert(combinedDice.end(), possibleReplacements[i].begin(), possibleReplacements[i].end());
     std::sort(combinedDice.begin(), combinedDice.end());
     Dice tempDice(combinedDice);
-    ev += permProb(possibleReplacements[i])*expectedValueOfFiveDice(tempDice);
+    ev += permProb(possibleReplacements[i])*expectedValueOfFiveDice(tempDice, turn);
   }
   return ev;
 }
@@ -439,7 +449,7 @@ public:
   int currentTurn();
   double topBonus();
   double score();
-  double heuristicStateScore();
+  double heuristicStateScore(int choice, Dice myDice);
 };
 
 ScoreCard::ScoreCard(ErlNifEnv* env, ERL_NIF_TERM scoreCardList){
@@ -485,14 +495,15 @@ double ScoreCard::score(){
   return score;
 }
 
-double ScoreCard::heuristicStateScore(){
+double ScoreCard::heuristicStateScore(int choice, Dice myDice){
   // Calculating the expected values given the turn (and boxes left).
   double stateScore = 0;
+  std::vector<double> turnHeuristicVector = getHeuristicVectorGivenTurn(currentTurn());
   for (size_t i = 0; i < 13; i++){
     if (scoreCardVector[i] != -1)
       stateScore += scoreCardVector[i];
     else
-      stateScore += heuristicVector[i];
+      stateScore += turnHeuristicVector[i];
   }
   if (topBonus() > 0)
     stateScore += 35;
@@ -500,6 +511,40 @@ double ScoreCard::heuristicStateScore(){
     stateScore += 23;
   return stateScore;
 }
+
+
+    // if (scoreCardVector[i] != -1){
+    //   if ((choice == i) && (choice < 6) && (topBonus() == 0)){
+    //     int count = std::count(myDice.dice.begin(), myDice.dice.end(), i+1);
+    //     int bonus = (count*(i+1))/63;
+    //     int tempScore = scoreCardVector[i] * (bonus + 1);
+    //     if ((tempScore > scoreCardVector[i]) && (count >=3))
+    //       stateScore += tempScore;
+    //     else
+    //       stateScore += scoreCardVector[i];
+    //   }
+
+    //   else
+
+// double weightForBonusDice(double ev, std::vector<int> diceKept){
+//   double newEv = ev;
+//   double tempEv = ev;
+//   int numCount;
+//   double bonus;
+//   int diceNum;
+//   for (int i = 0; i <= 5, i++){
+//     diceNum = i + 1;
+//     numCount = std::count(diceKept.begin(), diceKept.end(), diceNum);
+//     if ((scoreCard.scoreCardVector[i] == -1) && (numCount >= 2) && (scoreCard.topBonus() == 0)){
+//       bonus = (numCount*diceNum)/63;
+//       tempEv = ev*(bonus + 1);
+//       if (tempEv > newEv)
+//         newEv = tempEv;
+//     }
+//   }
+//   return newEv
+// }
+
 
 /*****************************************************************************
  *                              End Score Card                               *
@@ -530,6 +575,7 @@ public:
   std::vector<Move> getLegalMoves();
   double evOfMove(Move move);
   ScoreCard newScoreCardGivenDecision(int decision);
+  double weightForBonusDice(double ev, std::vector<int> diceKept);
 };
 
 Player::Player(ErlNifEnv* env, ERL_NIF_TERM diceList, ERL_NIF_TERM diceRoll, ERL_NIF_TERM scoreCardList)
@@ -581,16 +627,19 @@ double Player::evOfMove(Move move){
   //int currentTurn = scoreCard.currentTurn() - 1;
   if (move.m != -1){
     ScoreCard newScoreCard = newScoreCardGivenDecision(move.m); 
-    ev = newScoreCard.heuristicStateScore();
+    ev = newScoreCard.heuristicStateScore(move.m, myDice);
+
   }
 
   else{
+    int turn = scoreCard.currentTurn();
+    std::vector<double> turnHeuristicVector = getHeuristicVectorGivenTurn(turn);
     std::vector<int> diceKept;
     for (int i = 0; i < myDice.dice.size(); i++){
       if (move.keepIndices[i] == 1)
         diceKept.push_back(myDice.dice[i]);
     }
-    ev += EVdiceKept(diceKept);
+    ev += EVdiceKept(diceKept, turn);
     for (int i = 0; i < 14; i++){
       if (i == 13) {
         if (scoreCard.topBonus() != 0)
@@ -599,11 +648,31 @@ double Player::evOfMove(Move move){
       }
       else{
         if (scoreCard.scoreCardVector[i] != -1)
-          ev += (scoreCard.scoreCardVector[i] - heuristicVector[i]); //*pow(decayVector[i], currentTurn)
+          ev += (scoreCard.scoreCardVector[i] - turnHeuristicVector[i]); //*pow(decayVector[i], currentTurn)
       }
     }
+    //ev = weightForBonusDice(ev, diceKept);
   }
   return ev;
+}
+
+double Player::weightForBonusDice(double ev, std::vector<int> diceKept){
+  double newEv = ev;
+  double tempEv = ev;
+  int numCount;
+  double bonus;
+  int diceNum;
+  for (int i = 0; i <= 5; i++){
+    diceNum = i + 1;
+    numCount = std::count(diceKept.begin(), diceKept.end(), diceNum);
+    if ((scoreCard.scoreCardVector[i] == -1) && (numCount >= 2) && (scoreCard.topBonus() == 0)){
+      bonus = (numCount*diceNum)/63;
+      tempEv = ev*(bonus + 1);
+      if (tempEv > newEv)
+        newEv = tempEv;
+    }
+  }
+  return newEv;
 }
 
 

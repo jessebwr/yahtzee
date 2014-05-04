@@ -19,7 +19,7 @@ generateDice() ->
 
 get_avg()->
   A = lists:seq(1, 400),
-  B = lists:map(fun(X) -> run_one_game() end, A),
+  B = lists:map(fun(_X) -> run_one_game() end, A),
   lists:sum(B)/length(B).
 
 
@@ -35,7 +35,7 @@ run_one_game(Dice, RollNumber, ScoreCard, _TurnNumber) when
   DiceLeftOver = lists:subtract(Dice, DiceToGive),
   {_EV, KeepDice, _ReturnDice} = decide_choice(ScoreCard, ScoreCard, RollNumber, DiceToGive),
   NextDice = KeepDice ++ DiceLeftOver,
-  % io:format("Dice Given: ~p, DiceKept: ~p, DiceReturned: ~p, NextDice: ~p~n", [DiceToGive, KeepDice, _ReturnDice, NextDice]),
+  %io:format("Dice Given: ~p, DiceKept: ~p, DiceReturned: ~p~n", [DiceToGive, KeepDice, _ReturnDice]),
   run_one_game(NextDice, RollNumber + 1, ScoreCard, _TurnNumber);
 
 run_one_game(Dice, 3, ScoreCard, 13) ->
@@ -43,15 +43,16 @@ run_one_game(Dice, 3, ScoreCard, 13) ->
   {_EV, Choice} = decide_choice(ScoreCard, ScoreCard, 3, FinalDice),
   RealChoice = Choice + 1,
   NewScoreCard = updateScoreCard(ScoreCard, RealChoice, FinalDice),
-  % io:format("Dice Given: ~p, ChoiceMade: ~p, Final ScoreCard: ~p~n", [FinalDice, RealChoice, NewScoreCard]),
+  io:format("Dice Given: ~p, ChoiceMade: ~p, Final ScoreCard: ~p, Final Score: ~p~n", [FinalDice, RealChoice, NewScoreCard, score(NewScoreCard)]),
   score(NewScoreCard);
+  %io:format("Score: ~p, ScoreCard: ~p~n", [score(NewScoreCard), NewScoreCard]);
 
 run_one_game(Dice, 3, ScoreCard, TurnNumber) ->
   FinalDice = lists:sublist(Dice, 5),
   {_EV, Choice} = decide_choice(ScoreCard, ScoreCard, 3, FinalDice),
   RealChoice = Choice + 1,
   NewScoreCard = updateScoreCard(ScoreCard, RealChoice, FinalDice),
-  % io:format("Dice Given: ~p, ChoiceMade: ~p, NewScoreCard: ~p~n", [FinalDice, RealChoice, NewScoreCard]),
+  %io:format("Dice Given: ~p, ChoiceMade: ~p, NewScoreCard: ~p~n", [FinalDice, RealChoice, NewScoreCard]),
   run_one_game(generateDice(), 1, NewScoreCard, TurnNumber + 1).
 
 score(ScoreCard) ->
@@ -68,7 +69,7 @@ topBonus(Score) ->
       0
   end.
 
-decide_choice(MyCard, OpponentCard, RollNumber, CurrentDice) ->
+decide_choice(_MyCard, _OpponentCard, _RollNumber, _CurrentDice) ->
   "NIF library not loaded".
 
 
