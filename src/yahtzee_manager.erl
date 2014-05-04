@@ -305,7 +305,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 	    %% Invalid game that doesn't exist....  Ignore it since the protocol
 	    %% doesn't specify any action
 	    {noreply, S};
-	[{Tid, Gid}, M] ->
+	[{{Tid, Gid}, M}] ->
 	    P1 = M#match.p1,
 	    P1RollNum = M#match.p1RollNum,
 
@@ -363,14 +363,11 @@ handle_info( {play_action, _Pid, Username,
 	    ok;
 
 	[{Tid, Gid}, Match = #match{p1 = Username,
-				    p1RollNum = P1RollNum,
 				    p2RollNum = P2RollNum,
 				    p1ScoreCard = P1ScoreCard, 
 				    p2ScoreCard = P2ScoreCard,
-				    p1ListOfDice = P1ListOfDice, 
-				    p2ListOfDice = P2ListOfDice,
-				    p1Win = P1Win, p2Win = P2Win, 
-				    currentGame = CurrentGame }]
+				    p1ListOfDice = P1ListOfDice
+				   }]
 	->
 	    %% Yay it's a real game!  And we just heard from player 1, so that's good.
 	    %% Case of player 2 is handled below.
@@ -390,7 +387,7 @@ handle_info( {play_action, _Pid, Username,
 			true ->
 			    %% The game isn't over yet.  Check if Player 2 has
 			    %% scored this turn yet
-			    case p2RollNum of
+			    case P2RollNum of
 				0 ->
 				    %% Player 2 has already scored this turn.
 				    %% So we can go ahead and start the next
@@ -435,21 +432,17 @@ handle_info( {play_action, _Pid, Username,
 		_ ->
 		    %% Welp, they tried to score into a row they'd already
 		    %% scored.  KICK OUT THE DIRTY CHEATER
-		    kick_out_cheater(Username),
-		    {noreply, S}
+		    kick_out_cheater(Username)
 
 	    end; %% case nth(ScoreCardLine, P1ScoreCard)
 
 
-	[{Tid, Gid}, Match = #match{p1 = P1, p2 = Username, 
+	[{Tid, Gid}, Match = #match{p2 = Username, 
 				    p1RollNum = P1RollNum,
-				    p2RollNum = P2RollNum,
 				    p1ScoreCard = P1ScoreCard,
 				    p2ScoreCard = P2ScoreCard,
-				    p1ListOfDice = P1ListOfDice,
-				    p2ListOfDice = P2ListOfDice,
-				    p1Win = P1Win, p2Win = P2Win, 
-				    currentGame = CurrentGame }]
+				    p2ListOfDice = P2ListOfDice
+				    }]
 	->
 	    %% Yay it's a real game!  And we just heard from player 2.
 	    %% Case for Player 1 is handled above.
@@ -469,7 +462,7 @@ handle_info( {play_action, _Pid, Username,
 			true ->
 			    %% The game isn't over yet.  Check if Player 1 has
 			    %% scored this turn yet
-			    case p1RollNum of
+			    case P1RollNum of
 				0 ->
 				    %% Player 1 has already scored this turn.
 				    %% So we can go ahead and start the next
@@ -514,8 +507,7 @@ handle_info( {play_action, _Pid, Username,
 		_ ->
 		    %% Welp, they tried to score into a row they'd already
 		    %% scored.  KICK OUT THE DIRTY CHEATER
-		    kick_out_cheater(Username),
-		    {noreply, S}
+		    kick_out_cheater(Username)
 	    end %% case nth(ScoreCardLine, P2ScoreCard)
     end, %% case ets:lookup(?MatchTable, {Tid, Gid})
     {noreply, S};
@@ -801,10 +793,10 @@ create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRoun
     create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne).
 
 
-create_single_round_match( Bracket = [[bye, _PlayerTwo]], Tid ) ->
+create_single_round_match( Bracket = [[bye, _PlayerTwo]], _Tid ) ->
     Bracket;
 
-create_single_round_match( Bracket = [[_PlayerOne, bye]], Tid ) ->
+create_single_round_match( Bracket = [[_PlayerOne, bye]], _Tid ) ->
     Bracket;
 
 create_single_round_match( [[PlayerOne, PlayerTwo]], Tid ) ->
@@ -869,7 +861,7 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
     P2Score = scoreFullCard( P2ScoreCard ),
     
     %% Now find out how many games per match in this tournament
-    [{Tid, T = #tournament{gamesPerMatch = GamesPerMatch}}] = 
+    [{Tid, #tournament{gamesPerMatch = GamesPerMatch}}] = 
 	ets:lookup(?TournamentInfo, Tid),
     
     {NewP1Win, NewP2Win} = if
@@ -918,14 +910,15 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
 start_tiebreak_match( Tid, Match ) ->
     ok.
 
-start_new_game_in_match( Tid, Match = #match{currentGame = CurrentGame,
-					     p1Win = P1Win, p2Win = P2Win,
-					     p1 = P1, p2 = P2}) ->
+start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
+				     p1Win = P1Win, p2Win = P2Win,
+				     p1 = P1, p2 = P2}) ->
     Gid = make_ref(),
     Dice = generateDice(),
     NewMatch = #match{ p1 = P1, p2 = P2,
 		       p1ListOfDice = Dice, p2ListOfDice = Dice,
-		       p1Win = P1Win, p2Win = P2Win, currentGame = CurrentGame },
+		       p1Win = P1Win, p2Win = P2Win, 
+		       currentGame = CurrentGame + 1 },
     ets:insert(?MatchTable, {{Tid,Gid}, NewMatch }),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
 
@@ -937,7 +930,7 @@ start_new_game_in_match( Tid, Match = #match{currentGame = CurrentGame,
 %% update the tournament bracket, and
 %% create and send out the messages for a new match, or mark the tournament
 %% as over, if appropriate
-match_ended( Tid, Match = #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
+match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
   when P1Win > P2Win ->
     %% Player 1 won the match, Player 2 lost.
     [{P1, P1Info}] = ets:lookup(?UserInfo, P1),
@@ -1234,18 +1227,6 @@ updateDiceList( [FirstDie|RestDice], [FirstToKeep|RestToKeep], NumDiceToSend, []
 
 updateDiceList( [FirstDie|RestDice], [], NumDiceToSend, DiceToSend ) ->
     updateDiceList( RestDice, [], NumDiceToSend - 1, [FirstDie|DiceToSend] ).
-
-
-newGameInMatch( M, 1 ) ->
-    #match{ p1 = M#match.p1, p2 = M#match.p2,
-	    p1Win = M#match.p1Win + 1,
-	    currentGame = M#match.currentGame + 1 };
-
-newGameInMatch( M, 2 ) ->
-    #match{ p1 = M#match.p1, p2 = M#match.p2,
-	    p2Win = M#match.p2Win + 1,
-	    currentGame = M#match.currentGame + 1 }.
-
 
 generateDice() ->
     {A, B, C} = now(),
