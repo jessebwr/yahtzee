@@ -811,7 +811,7 @@ start_tournament(Tid, T) ->
            SingleMatch ++ [[none]];
 			 not OnlyOneRound ->
 			     Bracket = initialize_later_rounds( RoundOne, [], 0, utils:log2( length(RoundOne) ) ),
-			     create_matches( Bracket, 0, Tid, RoundOne)
+			     create_matches( Bracket, 1, Tid, RoundOne)
 		     end,
     
     %% Regardless of the number of players in the tournament, every real match
@@ -861,12 +861,12 @@ create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
     create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne);
 
-create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
+create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers] | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     GameRef = make_ref(),
     ets:insert(?MatchTable, {{Tid, GameRef}, #match{ p1 = FirstPlayer,
 						     p2 = SecondPlayer}}),
-    create_matches( [RestPlayers, RoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne).
+    create_matches( [RestPlayers | RestRounds], CurrMatchInd + 1, Tid, RoundOne).
 
 
 create_single_round_match( Bracket = [[bye, _PlayerTwo]], _Tid ) ->
