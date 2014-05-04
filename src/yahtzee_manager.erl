@@ -29,6 +29,7 @@
 -define(TournamentInfo, tournamentInfo).
 -define(TimeOutRefs, timeOutRefs).
 -define(MatchTable, matchTable).
+-define(NotDead, notDead).
 
 
 -record(user, {password,
@@ -105,8 +106,11 @@ init({}) ->
     %% {Tid, Gid} : Match
     ets:new(?MatchTable, [set, public, named_table]),
 
-    %% A dictionary of Username:{Pid, MonitorRef, LoginTicket}
+    %% A dictionary of Username:{Pid, MonitorRef, LoginTicket, InRightNow?}
     ets:new(?CurrentPlayerLoginInfo, [set, public, named_table]),
+
+    %%
+    ets:new(?NotDead, [set, public, named_table]),
 
     io:format(utils:timestamp() ++ ": all ets tables succesfully initialized~n"),
 
@@ -131,7 +135,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
     io:format(utils:timestamp() ++ ": received login message from ~p~n", [Username]),
     LoginTicket = make_ref(),
 
-    case ets:lookup(?CurrentPlayerLoginInfo, Username) of
+    case ets:lookup(?NotDead, Username) of
 
       [] -> %% Player is not currently logged in, so proceed normally
         case ets:lookup(?UserInfo, Username) of
@@ -143,6 +147,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
             %% Monitoring it and setting up its current info
             MonitorRef = monitor(process, Pid),
             ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
+            ets:insert(?NotDead, {Username}),
 
             %% Messaging that they are logged in.
             Pid ! {logged_in, self(), Username, LoginTicket},
@@ -154,7 +159,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
                 {noreply, S};
               false ->
                 io:format(utils:timestamp() ++ ": ~p has logged in before, now logging them back in~n", [Username]),
-
+                ets:insert(?NotDead, {Username}),
                 %% Monitoring it and stting up its current info
                 MonitorRef = monitor(process, Pid),
                 ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
@@ -199,8 +204,7 @@ handle_info({logout, Pid, Username, LoginTicket}, S) ->
 
 	    handle_gone(Username),
 
-	    %% Deleting this user's current session information
-	    ets:delete(?CurrentPlayerLoginInfo, Username),
+	    ets:delete(?NotDead, Username),
 	    {noreply, S};
 
 	%% Someone else was trying to log them out...
@@ -620,6 +624,7 @@ handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
     Username = hd( ets:match( ?CurrentPlayerLoginInfo, {'$1', {Pid, '_', '_'} } ) ),
     io:format(utils:timestamp() ++ ": received DOWN message from ~p" ++
 		  "with Pid ~p~n", [Username, Pid]),
+    ets:delete(?NotDead, Username),
     handle_gone( Username ),
     {noreply, S};
 
@@ -627,6 +632,8 @@ handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
 %% P1 wins, P2 loses
 handle_info({Tid, NewGid, P1, P2}, S) ->
   ets:delete(?TimeOutRefs, {P2, Tid, NewGid}),
+  %% Deleting this user's current session information
+  ets:delete(?CurrentPlayerLoginInfo, P2),
   NewMatch = #match{p1 = P1,
         p2 = P2,
         currentGame = 0,
@@ -679,8 +686,13 @@ handle_kicked_game(Tid, Gid, _Username, 2) ->
 handle_gone(Username) ->
     UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
     UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
-    lists:foreach(fun( [Tid, Gid] ) -> handle_gone_game(Tid, Gid, Username, 1) end, UserMatchesP1),
-    lists:foreach(fun( [Tid, Gid] ) -> handle_gone_game(Tid, Gid, Username, 2) end, UserMatchesP2).
+    case UserMatchesP1 ++ UserMatchesP2 of
+      [] ->
+        ets:delete(?CurrentPlayerLoginInfo, Username);
+      _Else -> 
+        lists:foreach(fun( [Tid, Gid] ) -> handle_gone_game(Tid, Gid, Username, 1) end, UserMatchesP1),
+        lists:foreach(fun( [Tid, Gid] ) -> handle_gone_game(Tid, Gid, Username, 2) end, UserMatchesP2)
+    end.
 
 
 handle_gone_game(Tid, Gid, _Username, 1) ->
