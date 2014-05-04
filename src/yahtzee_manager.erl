@@ -130,36 +130,45 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
     io:format(utils:timestamp() ++ ": received login message from ~p~n", [Username]),
     LoginTicket = make_ref(),
 
-    case ets:lookup(?UserInfo, Username) of
-	[] ->
-	    io:format(utils:timestamp() ++ ": ~p is a new player, now logging them in~n", [Username]),
-	    %% Initializing the user in our record database
-	    ets:insert(?UserInfo, {Username, #user{password = Password}}),
+    case ets:lookup(?CurrentPlayerLoginInfo, Username) of
 
-	    %% Monitoring it and setting up its current info
-	    MonitorRef = monitor(process, Pid),
-	    ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
+      [] -> %% Player is not currently logged in, so proceed normally
+        case ets:lookup(?UserInfo, Username) of
+          [] ->
+            io:format(utils:timestamp() ++ ": ~p is a new player, now logging them in~n", [Username]),
+            %% Initializing the user in our record database
+            ets:insert(?UserInfo, {Username, #user{password = Password}}),
 
-	    %% Messaging that they are logged in.
-	    Pid ! {logged_in, self(), Username, LoginTicket},
-	    {noreply, S};
+            %% Monitoring it and setting up its current info
+            MonitorRef = monitor(process, Pid),
+            ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
 
-	[{Username, {Password, _, _, _, _}}] ->
-	    io:format(utils:timestamp() ++ ": ~p has logged in before, now logging them back in~n", [Username]),
+            %% Messaging that they are logged in.
+            Pid ! {logged_in, self(), Username, LoginTicket},
+            {noreply, S};
 
-	    %% Monitoring it and stting up its current info
-	    MonitorRef = monitor(process, Pid),
-	    ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
+          [{Username, {Password, _, _, _, _}}] ->
+            io:format(utils:timestamp() ++ ": ~p has logged in before, now logging them back in~n", [Username]),
 
-	    %% Messaging that they are logged in
-	    Pid ! {logged_in, self(), Username, LoginTicket},
-	    {noreply, S};
+            %% Monitoring it and stting up its current info
+            MonitorRef = monitor(process, Pid),
+            ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
 
-	%% They didn't give the right password
-	[{Username, {_DiffPassword, _, _, _, _}}] ->
-	    io:format(utils:timestamp() ++ ": Incorrect password entered!~n"),
-	    Pid ! {incorrect_password, Username},
-	    {noreply, S}
+            %% Messaging that they are logged in
+            Pid ! {logged_in, self(), Username, LoginTicket},
+            {noreply, S};
+
+          %% They didn't give the right password
+          [{Username, {_DiffPassword, _, _, _, _}}] ->
+            io:format(utils:timestamp() ++ ": Incorrect password entered!~n"),
+            Pid ! {incorrect_password, Username},
+            {noreply, S}
+          end;
+
+      _ -> %% This player is already logged in, so don't proceed
+        io:format(utils:timestamp() ++ ": ~p is already logged in~n", [Username]),
+        Pid ! {already_logged_in, Username},
+        {noreply, S}
     end;
 
 
