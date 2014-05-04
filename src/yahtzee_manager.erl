@@ -987,13 +987,14 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
 start_tiebreak_match( Tid, #match{p1 = P1, p2 = P2} ) ->
     io:format( utils:timestamp() ++ ": Starting a tiebreak match for tournament ~p between players ~p and ~p.", [Tid, P1, P2
 ] ),
-    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true},
+
     Gid = make_ref(),
     P1Dice = generateDice(),
     P2Dice = generateDice(),
-    ets:insert(?MatchTable,
-	       {{Tid, Gid}, NewMatch#match{p1ListOfDice = P1Dice,
-					   p2ListOfDice = P2Dice}}),
+    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true,
+		      p1ListOfDice = P1Dice, p2ListOfDice = P2Dice},
+    ets:insert(?MatchTable, 
+	       {{Tid, Gid}, NewMatch}),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
     
 
