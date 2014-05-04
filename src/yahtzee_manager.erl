@@ -626,7 +626,7 @@ handle_gone_game(Tid, Gid, _Username, 1) ->
 			      currentGame = NewCurrentGame,
 			      p2Win = P2Win,
 			      p1Win = P1Win},
-    	    match_ended(Tid, Gid, NewMatch);
+    	    match_ended(Tid, NewMatch);
 
     	false ->
     	    %% Just make them lose the game
@@ -661,7 +661,7 @@ handle_gone_game(Tid, Gid, _Username, 2) ->
 			      currentGame = NewCurrentGame,
 			      p2Win = P2Win,
 			      p1Win = P1Win},
-	    match_ended(Tid, Gid, NewMatch);
+	    match_ended(Tid, NewMatch);
 
 	false ->
 	    %% Just make them lose the game
