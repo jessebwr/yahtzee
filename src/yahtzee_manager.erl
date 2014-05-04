@@ -631,7 +631,7 @@ start_tournament(Tid, T) ->
 			 OnlyOneRound ->
 			     create_single_round_match([RoundOne], Tid);
 			 not OnlyOneRound ->
-			     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
+			     Bracket = initialize_later_rounds( RoundOne, [], 0, utils:log2( length(RoundOne) ) ),
 			     create_matches( Bracket, 0, Tid, RoundOne)
 		     end,
     
