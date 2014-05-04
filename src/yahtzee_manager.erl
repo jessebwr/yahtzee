@@ -415,6 +415,7 @@ handle_info( {play_action, _Pid, Username,
             				_ ->
             				    %% Still waiting for Player 2 to score.
             				    %% Just update player 1's info in the record
+					    io:format("Player 1 just scored a turn.  Just updating their record.~n"),
             				    ets:insert(?MatchTable, {{Tid, Gid},
             							     Match#match{p1ScoreCard =
             									     NewP1ScoreCard,
@@ -439,6 +440,7 @@ handle_info( {play_action, _Pid, Username,
     				true ->
     				    %% Nope, still waiting for Player 2.  Just
     				    %% update the match record
+				    io:format("Player 1 just scored a turn.  Just updating their record.~n"),
     				    ets:insert(?MatchTable, {{Tid, Gid},
     							     Match#match{p1ScoreCard =
     									     NewP1ScoreCard,
@@ -491,6 +493,7 @@ handle_info( {play_action, _Pid, Username,
 				_ ->
 				    %% Still waiting for Player 1 to score.
 				    %% Just update player 2's info in the record
+				    io:format("Player 2 just scored a turn.  Just updating their record.~n"),
 				    ets:insert(?MatchTable, {{Tid, Gid},
 							     Match#match{p2ScoreCard =
 									     NewP2ScoreCard,
@@ -515,6 +518,7 @@ handle_info( {play_action, _Pid, Username,
 				true ->
 				    %% Nope, still waiting for Player 1.  Just
 				    %% update the match record
+				    io:format("Player 2 just scored a turn.  Just updating their record.~n"),
 				    ets:insert(?MatchTable, {{Tid, Gid},
 							     Match#match{p2ScoreCard =
 									     NewP2ScoreCard,
