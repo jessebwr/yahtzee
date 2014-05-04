@@ -289,7 +289,7 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 %% Handle a non-scoring message, where scorecard-line is 0
 handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0} }, S) ->
     io:format(utils:timestamp() ++ ": received play_action message from ~p with the following info~nTid: ~p~n Gid: ~p~nRollNum: ~p~n DiceToKeep: ~p~nTid: ~p~n Scorecard Line: 0~n",
-	      [Username, Tid, Gid, RollNum, DiceToKeep]),
+	      [Username, Tid, Gid, RollNum, DiceToKeep, 0]),
 
     case ets:lookup(?MatchTable, {Tid, Gid}) of
 	[] ->
@@ -621,8 +621,13 @@ handle_gone_game(Tid, Gid, _Username, 1) ->
 
     case P2Win > (GamesPerMatch / 2) of
     	true ->
-%%    	    forcibly_end_match(Tid, Gid, P2, P1);
-	    ok;
+	    NewMatch = #match{p1 = P1,
+			      p2 = P2,
+			      currentGame = NewCurrentGame,
+			      p2Win = P2Win,
+			      p1Win = P1Win},
+    	    match_ended(Tid, Gid, NewMatch);
+
     	false ->
     	    %% Just make them lose the game
     	    NewGid = make_ref(),
@@ -651,8 +656,13 @@ handle_gone_game(Tid, Gid, _Username, 2) ->
 
     case P1Win > (GamesPerMatch / 2) of
 	true ->
-%%	    forcibly_end_match(Tid, Gid, P1, P2);
-	    ok;
+	    NewMatch = #match{p1 = P1,
+			      p2 = P2,
+			      currentGame = NewCurrentGame,
+			      p2Win = P2Win,
+			      p1Win = P1Win},
+	    match_ended(Tid, Gid, NewMatch);
+
 	false ->
 	    %% Just make them lose the game
 	    NewGid = make_ref(),
@@ -723,14 +733,14 @@ start_tournament(Tid, T) ->
 			 OnlyOneRound ->
 			     create_single_round_match([RoundOne], Tid);
 			 not OnlyOneRound ->
-			     Bracket = initialize_later_rounds( RoundOne, [], 1, utils:log2( length(RoundOne) ) ),
+			     Bracket = initialize_later_rounds( RoundOne, [], 0, utils:log2( length(RoundOne) ) ),
 			     create_matches( Bracket, 0, Tid, RoundOne)
 		     end,
     
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
     io:format("UpdatedBracket: ~p~n", [UpdatedBracket]),
-    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, $2 } ),
+    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, '$2' } ),
     io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
     NewT = T#tournament{ started = true,
 			 bracket = UpdatedBracket },
@@ -995,7 +1005,7 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
     P2 = M#match.p2,
 
     [{P1, {Pid1, _MonitorRef1, _LoginTicket1}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
-    [{P1, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
+    [{P2, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P2),
 
     P1DiceToSend = lists:sublist(M#match.p1ListOfDice, NumDiceToSendP1),
     P2DiceToSend = lists:sublist(M#match.p2ListOfDice, NumDiceToSendP2),

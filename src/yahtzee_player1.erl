@@ -55,16 +55,19 @@
 -behavior(gen_server).
 
 %% External exports
--export([main/1
+-export([main/1,
+         decide_choice/4,
+         playerAI/4,
+         init/0
          ]).
 
 %% gen_server callbacks
 -export([init/1, 
-		 handle_call/3, 
-		 handle_cast/2, 
-		 handle_info/2, 
-		 code_change/3, 
-		 terminate/2]).
+     handle_call/3, 
+     handle_cast/2, 
+     handle_info/2, 
+     code_change/3, 
+     terminate/2]).
 
 -define(PROCNAME, player1).
 -define(MANAGER_NAME, yahtzee_manager).
@@ -93,18 +96,22 @@
 %%%============================================================================
 
 main(Params) ->
-  % Return = yahtzee_chooser:decide_choice([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0]
-  %   , [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0], 1, [1,2,3,4,5]),
-  % io:format("Jesse made: ~p~n", [Return]),
   NodeName = hd(Params),
   Username = hd(tl(Params)),
   Password = hd(tl(tl(Params))),
   Managers = tl(tl(tl(Params))),
+  io:format("Managers: ~p~n", [Managers]),
   AtomizedManagers = lists:map(fun(X) -> list_to_atom(X) end, Managers),
   os:cmd("epmd -daemon"),
   net_kernel:start([list_to_atom(NodeName), shortnames]),
+  yahtzee_chooser:init(),
   gen_server:start({local, ?PROCNAME}, ?MODULE, 
-  	        {Username, Password, AtomizedManagers}, []).
+            {Username, Password, AtomizedManagers}, []).
+init() -> 
+% filename:join ([filename:dirname (code:which (?MODULE)),"..","bin"] ),
+% erlang:load_nif (filename:join (PrivDir, "chooser"), 0).
+erlang:load_nif("./yahtzee_chooser", 0).
+
 
 
 %%%============================================================================
@@ -116,6 +123,7 @@ main(Params) ->
 %%% GenServer Callbacks 
 %%%============================================================================
 
+%% @spec init({NodesToConnectTo}) -> {ok, State}.
 init({Username, Password, TournamentManagerNames}) ->
   login_to_managers(TournamentManagerNames, Username, Password),
   {ok, #state{username = Username,
@@ -256,9 +264,39 @@ terminate(_Reason, _State) ->
 
 %% REALLY SILLY AI IMPLEMENTATION, MAKE THIS BETTER!
 playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) ->
-  % yahtzee_chooser:decide_choice(Scorecard, OpponentsScorecard, RollNumber, Dice).
-  {[true, true, true, true, true], 1}.
-    
+  case RollNumber of
+    3 ->
+      {_EV, Choice} = yahtzee_chooser:decide_choice(Scorecard, OpponentsScorecard, 3, Dice),
+      {[true, true, true, true, true], Choice};
+    _ ->
+      {_EV, KeepDice, _ReturnDice} = yahtzee_chooser:decide_choice(Scorecard, OpponentsScorecard, RollNumber, Dice),
+      BoolList = get_bool_list(KeepDice, Dice),
+      {BoolList, 0}
+  end.
+
+
+get_bool_list([], Dice) ->
+  finalize(Dice);
+
+get_bool_list([KeptDie | Rest], Dice) ->
+  Index = string:str(Dice, [KeptDie]),
+  NewDice = utils:set_list_index(Dice, Index, true),
+  get_bool_list(Rest, NewDice).
+
+finalize([]) ->
+  [];
+
+finalize([H | T]) ->
+  case H == true of
+    true ->
+      [H] ++ finalize(T);
+    false ->
+      [false] ++ finalize(T)
+  end.
+
+
+decide_choice(_MyCard, _OpponentCard, _RollNumber, _CurrentDice) ->
+  "NIF library not loaded".
 
 
 %%%============================================================================
