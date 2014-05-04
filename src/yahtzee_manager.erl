@@ -159,8 +159,10 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
                 ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
                 UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
                 UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
-                
-
+                lists:foreach(fun({Tid, Gid}) -> [{{Tid, Gid},Match}] = ets:lookup(?MatchTable),
+                                                 start_matches(Tid, [[Gid, Match]]) end, UserMatchesP1),
+                lists:foreach(fun({Tid, Gid}) -> [{{Tid, Gid},Match}] = ets:lookup(?MatchTable),
+                                                 start_matches(Tid, [[Gid, Match]]) end, UserMatchesP2),
 
                 %% Messaging that they are logged in
                 Pid ! {logged_in, self(), Username, LoginTicket},
@@ -615,7 +617,8 @@ handle_info({Tid, NewGid, P1, P2}, S) ->
         currentGame = 0,
         p2Win = 0,
         p1Win = 1},
-  match_ended(Tid, NewMatch);
+  match_ended(Tid, NewMatch),
+  {noreply, S};
 
 
 handle_info(MSG, S) ->
@@ -635,14 +638,10 @@ kick_out_cheater( Username ) ->
 handle_kicked_game(Tid, Gid, _Username, 1) ->
     [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
     ets:delete(?MatchTable, {Tid, Gid} ),
-    [{_, T}] = ets:lookup(?TournamentInfo, Tid),
 
     P1 = M#match.p1,
     P2 = M#match.p2,
     NewCurrentGame = M#match.currentGame + 1,
-    GamesPerMatch = T#tournament.gamesPerMatch,
-    P1Win = M#match.p1Win,
-    P2Win = M#match.p2Win + 1,
     NewMatch = #match{p1 = P1,
             p2 = P2,
             currentGame = NewCurrentGame,
@@ -653,14 +652,10 @@ handle_kicked_game(Tid, Gid, _Username, 1) ->
 handle_kicked_game(Tid, Gid, _Username, 2) ->
     [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
     ets:delete(?MatchTable, {Tid, Gid} ),
-    [{_, T}] = ets:lookup(?TournamentInfo, Tid),
 
     P1 = M#match.p1,
     P2 = M#match.p2,
     NewCurrentGame = M#match.currentGame + 1,
-    GamesPerMatch = T#tournament.gamesPerMatch,
-    P1Win = M#match.p1Win + 1,
-    P2Win = M#match.p2Win,
     NewMatch = #match{p1 = P1,
             p2 = P2,
             currentGame = NewCurrentGame,
