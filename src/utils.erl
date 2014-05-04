@@ -55,11 +55,14 @@ index_of( Elem, [_ | RestList], Index ) ->
     index_of( Elem, RestList, Index + 1 ).
 
 
-ceiling( Number ) when is_integer(Number), Number > 0 ->
-    Number;
-
 ceiling( Number ) when is_number(Number), Number > 0 ->
-    erlang:trunc(Number) + 1.
+    A = round( Number ),
+    case A of
+	A when A >= Number ->
+	    A;
+	A when A < Number ->
+	    A + 1
+    end.
 
 
 
