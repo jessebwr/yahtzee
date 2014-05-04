@@ -627,9 +627,8 @@ handle_info(MSG, S) ->
 
 %% TODO: actually implement
 kick_out_cheater( Username ) ->
-    User = ets:lookup(?UserInfo, Username),
-    NewUser = User#user{password = cheater},
-    ets:insert(?UserInfo, NewUser),
+    NewUser = #user{password = cheater},
+    ets:insert(?UserInfo, {Username, NewUser}),
     UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
     UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
     lists:foreach(fun( [Tid, Gid] ) -> handle_kicked_game(Tid, Gid, Username, 1) end, UserMatchesP1),
