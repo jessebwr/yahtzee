@@ -59,9 +59,10 @@ for information regarding players, matches, and games. The tournament
 bracket is updated everytime a match ends, until only a single player
 (the winner) is left int he bracket. Along the way if two players
 make the exact same decisions, a tie break game begins and the
-players are given difference dice rolls as explain in the assignment.
+players are given difference dice rolls as explained in the assignment.
+The manager handles players quitting when they're not in any matches.
 See the Yahtzee Protocol page for a more detailed explanation of the
-different messages the manager listens for and sends out.
+different messages the manager listens for and sends out. 
 
 
 
