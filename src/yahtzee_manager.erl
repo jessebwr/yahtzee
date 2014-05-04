@@ -1093,9 +1093,9 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     	    P2Pid ! {end_tournament, self(), P2, Tid},
 
     	    %% The tournament is over, Player 1 won, update the tournament
-    	    ets:insert(Tid, T#tournament{bracket = NewBracket,
-    					 status = completed,
-    					 winner = P2});
+    	    ets:insert(?TournamentInfo, {Tid, T#tournament{bracket = NewBracket,
+							   status = completed,
+							   winner = P2}});
     	none ->
     	    %% The next round opponent hasn't finished the previous match yet
     	    %% Do nothing...
