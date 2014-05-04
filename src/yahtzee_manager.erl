@@ -861,6 +861,22 @@ create_matches( [ [] | Rest ], _CurrMatchInd, _Tid, RoundOne) ->
 create_matches( [ [bye, SecondPlayer | RestPlayers], RoundTwo | RestRounds ],
 		CurrMatchInd, Tid, RoundOne) ->
     NewRoundTwo = utils:set_list_index( RoundTwo, CurrMatchInd, SecondPlayer ),
+    PossibleOpponent = if
+			   CurrMatchInd rem 2 == 0 ->
+			       lists:nth(CurrMatchInd - 1, RoundTwo);
+			   CurrMatchInd rem 2 == 1 ->
+			       lists:nth(CurrMatchInd + 1, RoundTwo)
+		       end,
+
+    case PossibleOpponent of
+	none ->
+	    ok;
+	_ ->
+	    GameRef = make_ref(),
+	    ets:insert(?MatchTable, {{Tid, GameRef}, #match{p1 = PossibleOpponent,
+							    p2 = SecondPlayer}})
+    end,
+
     create_matches( [RestPlayers, NewRoundTwo | RestRounds], CurrMatchInd + 1, Tid, RoundOne);
 
 create_matches( [ [FirstPlayer, SecondPlayer | RestPlayers] | RestRounds ],
