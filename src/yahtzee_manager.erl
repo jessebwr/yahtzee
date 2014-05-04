@@ -894,7 +894,7 @@ advanceWinnerToNextRound([FirstRound, SecondRound | RestRounds], Winner, PrevRou
     case CorrectRound of
 	true ->
 	    %% Cool, we found the round where the player last played.
-	    NextRoundIndex = utils:ceiling( utils:index_of( Winner, FirstRound ) / 2 ),
+	    NextRoundIndex = utils:ceiling( utils:index_of( Winner, FirstRound , 1) / 2 ),
 	    NewSecondRound = utils:set_list_index( SecondRound, NextRoundIndex, Winner ),
 	    NewBracket = PrevRounds ++ [FirstRound, NewSecondRound | RestRounds],
 	    NewOpponent = if
