@@ -263,7 +263,7 @@ terminate(_Reason, _State) ->
 %%%============================================================================
 
 %% REALLY SILLY AI IMPLEMENTATION, MAKE THIS BETTER!
-playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) ->
+playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) when (length(Dice) == 5) ->
   case RollNumber of
     3 ->
       {_EV, Choice} = yahtzee_chooser:decide_choice(Scorecard, OpponentsScorecard, 3, Dice),
