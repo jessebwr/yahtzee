@@ -989,9 +989,11 @@ start_tiebreak_match( Tid, #match{p1 = P1, p2 = P2} ) ->
 ] ),
     NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true},
     Gid = make_ref(),
+    P1Dice = generateDice(),
+    P2Dice = generateDice(),
     ets:insert(?MatchTable,
-	       {{Tid, Gid}, NewMatch#match{p1ListOfDice = generateDice(),
-					   p2ListOfDice = generateDice()}}),
+	       {{Tid, Gid}, NewMatch#match{p1ListOfDice = P1Dice,
+					   p2ListOfDice = P2Dice}}),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
     
 
