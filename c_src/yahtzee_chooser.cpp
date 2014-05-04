@@ -733,7 +733,7 @@ static ERL_NIF_TERM decide_choice(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
 
   
   else{
-    auto returnTuple = std::make_tuple(iEv, bestMove.m);
+    auto returnTuple = std::make_tuple(iEv, bestMove.m + 1);
     return nifpp::make(env, returnTuple);
   }
 }

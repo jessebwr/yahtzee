@@ -93,19 +93,19 @@ main([StrNodeName]) ->
 init({}) ->
     %% UserInfo will hold 
     %% Username: user record (see above)
-    ets:new(?UserInfo, [set, protected, named_table]),
+    ets:new(?UserInfo, [set, public, named_table]),
 
     %% TournamentInfo will hold tid : #tournament
-    ets:new(?TournamentInfo, [set, protected, named_table]),
+    ets:new(?TournamentInfo, [set, public, named_table]),
 
     %% Just some timeout references
-    ets:new(?TimeOutRefs, [set, protected, named_table]),
+    ets:new(?TimeOutRefs, [set, public, named_table]),
 
     %% {Tid, Gid} : Match
-    ets:new(?MatchTable, [set, protected, named_table]),
+    ets:new(?MatchTable, [set, public, named_table]),
 
     %% A dictionary of Username:{Pid, MonitorRef, LoginTicket}
-    ets:new(?CurrentPlayerLoginInfo, [set, protected, named_table]),
+    ets:new(?CurrentPlayerLoginInfo, [set, public, named_table]),
 
     io:format(utils:timestamp() ++ ": all ets tables succesfully initialized~n"),
 
@@ -230,7 +230,13 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 		false ->
 		    %% Since they accepted, add them to the dictionary of players
-		    NewListOfPlayers = T#tournament.listOfPlayers ++ [Username],
+		    NewListOfPlayers = [ {Username, Pid} | T#tournament.listOfPlayers],
+
+		    %% Add to their stats
+		    [{Username, PlayerInfo = #user{tournaments_played = TsPlayed}}] = 
+			ets:lookup(?UserInfo, Username),
+		    ets:insert(?UserInfo, {Username, 
+					   PlayerInfo#user{tournaments_played = TsPlayed + 1}}),
 
 		    %% If we have enough players, start the tournament
 		    NumPlayersReplied = T#tournament.numPlayersReplied + 1,
@@ -367,7 +373,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %% %% Scoring move!  :(
 handle_info( {play_action, _Pid, Username, 
 	      {_Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine}}, S) ->
-    io:format(utils:timestamp() ++ ": received play_action message from ~p "
+    io:format(utils:timestamp() ++ ": received a scoring play_action message from ~p "
 	      ++ "with the following info~nTid: ~p~n"
 	      ++ "Gid: ~p~nRollNum: ~p~n"
 	      ++ "DiceToKeep: ~p~n"
@@ -789,7 +795,8 @@ start_tournament(Tid, T) ->
 
     %% Pair off players according to a fixed single-elimination tournament
     %% bracket.
-    RoundOne = create_initial_bracket( ListOfPlayers, [], NumByesNeeded ),    
+    PlayerNames = lists:map( fun({Name, _Pid}) -> Name end, ListOfPlayers ),
+    RoundOne = create_initial_bracket( PlayerNames, [], NumByesNeeded ),    
 
     %% Once the players are paired off and the entire tournament bracket is
     %% created, we can handle bye-paired matches by advancing the real player
@@ -817,7 +824,7 @@ start_tournament(Tid, T) ->
     ets:insert(?TournamentInfo, {Tid, NewT}),
     io:format( utils:timestamp() ++ ": Calling start_matches~n" ),
     start_matches( Tid, Matches ),
-    T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, ListOfPlayers, blah}}.
+    T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, PlayerNames, blah}}.
 
 
 
@@ -893,7 +900,7 @@ advanceWinnerToNextRound([FirstRound, SecondRound | RestRounds], Winner, PrevRou
     case CorrectRound of
 	true ->
 	    %% Cool, we found the round where the player last played.
-	    NextRoundIndex = utils:ceiling( utils:index_of( Winner, FirstRound ) / 2 ),
+	    NextRoundIndex = utils:ceiling( utils:index_of( Winner, FirstRound , 1) / 2 ),
 	    NewSecondRound = utils:set_list_index( SecondRound, NextRoundIndex, Winner ),
 	    NewBracket = PrevRounds ++ [FirstRound, NewSecondRound | RestRounds],
 	    NewOpponent = if
@@ -978,11 +985,16 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
 %% For a match that ended in a tie, run the match again in "tiebreak mode"
 %% where the players use disparate dice pools
 start_tiebreak_match( Tid, #match{p1 = P1, p2 = P2} ) ->
-    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true},
+    io:format( utils:timestamp() ++ ": Starting a tiebreak match for tournament ~p between players ~p and ~p.", [Tid, P1, P2
+] ),
+
     Gid = make_ref(),
-    ets:insert(?MatchTable,
-	       {{Tid, Gid}, NewMatch#match{p1ListOfDice = generateDice(),
-				      p2ListOfDice = generateDice()}}),
+    P1Dice = generateDice(),
+    P2Dice = generateDice(),
+    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true,
+		      p1ListOfDice = P1Dice, p2ListOfDice = P2Dice},
+    ets:insert(?MatchTable, 
+	       {{Tid, Gid}, NewMatch}),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
     
 
@@ -996,7 +1008,9 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 
     {P1Dice, P2Dice} = if
 			   IsTiebreak ->
-			       {generateDice(), generateDice()};
+			       P1D = generateDice(),
+			       P2D = generateDice(),
+			       {P1D, P2D};
 			   not IsTiebreak ->
 			       Dice = generateDice(),
 			       {Dice, Dice}
@@ -1005,7 +1019,8 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
     NewMatch = #match{ p1 = P1, p2 = P2,
 		       p1ListOfDice = P1Dice, p2ListOfDice = P2Dice,
 		       p1Win = P1Win, p2Win = P2Win, 
-		       currentGame = CurrentGame + 1 },
+		       currentGame = CurrentGame + 1,
+		       isTiebreak = IsTiebreak },
     ets:insert(?MatchTable, {{Tid,Gid}, NewMatch }),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
 
@@ -1019,34 +1034,39 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 %% as over, if appropriate
 match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
   when P1Win > P2Win ->
+    io:format( utils:timestamp() ++ "~p won a match against ~p in tournament ~p!", [P1, P2, Tid] ),
     %% Player 1 won the match, Player 2 lost.
     [{P1, P1Info}] = ets:lookup(?UserInfo, P1),
     [{P2, P2Info}] = ets:lookup(?UserInfo, P2),
     ets:insert(?UserInfo, {P1, P1Info#user{match_wins =
 					       P1Info#user.match_wins + 1}}),
     ets:insert(?UserInfo, {P2, P2Info#user{match_losses =
-					       P1Info#user.match_losses + 1}}),
+					       P2Info#user.match_losses + 1}}),
 
     [{Tid, T = #tournament{bracket = Bracket, listOfPlayers = PlayerList}}] =
   	ets:lookup(?TournamentInfo, Tid),
       
     %% Send Player 2 a tournament_over message since they just got knocked out
     %% of the single-elimination tournament
-    {P2, P2Pid} = lists:keyfind( P2, 0, PlayerList ),
+    {P2, P2Pid} = lists:keyfind( P2, 1, PlayerList ),
     P2Pid ! {end_tournament, self(), P2, Tid},
 
     {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P1, [] ),
     case NewOpponent of 
     	undefined ->
+	    io:format( utils:timestamp() ++ ": ~p won tournament ~p!", [P1, Tid] ),
     	    %% Send Player 1 a tournament_over message since the tournament
     	    %% ended
-    	    {P1, P1Pid} = lists:keyfind( P1, 0, PlayerList ),
+    	    {P1, P1Pid} = lists:keyfind( P1, 1, PlayerList ),
     	    P1Pid ! {end_tournament, self(), P1, Tid},
 
     	    %% The tournament is over, Player 1 won, update the tournament
-    	    ets:insert(Tid, T#tournament{bracket = NewBracket,
-    					 status = completed,
-    					 winner = P1});
+    	    ets:insert(?TournamentInfo, {Tid, T#tournament{bracket = NewBracket,
+							   status = completed,
+							   winner = P1}}),
+	    %% Update tournament win stat
+	    ets:insert(?UserInfo, {P1, P1Info#user{tournaments_won = P1Info#user.tournaments_won + 1}});
+	
     	none ->
     	    %% The next round opponent hasn't finished the previous match yet
     	    %% Do nothing...
@@ -1059,7 +1079,56 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     			       p1ListOfDice = Dice, p2ListOfDice = Dice },
     	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
     	    sendDice( Tid, NewGid, NewMatch, 5, 5 )
+    end;
+
+match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
+  when P2Win > P1Win ->
+    io:format( utils:timestamp() ++ "~p won a match against ~p in tournament ~p!", [P2, P1, Tid] ),
+    %% Player 2 won the match, Player 1 lost.
+    [{P1, P1Info}] = ets:lookup(?UserInfo, P1),
+    [{P2, P2Info}] = ets:lookup(?UserInfo, P2),
+    ets:insert(?UserInfo, {P1, P1Info#user{match_losses =
+					       P1Info#user.match_losses + 1}}),
+    ets:insert(?UserInfo, {P2, P2Info#user{match_wins =
+					       P2Info#user.match_wins + 1}}),
+
+    [{Tid, T = #tournament{bracket = Bracket, listOfPlayers = PlayerList}}] =
+  	ets:lookup(?TournamentInfo, Tid),
+      
+    %% Send Player 2 a tournament_over message since they just got knocked out
+    %% of the single-elimination tournament
+    {P1, P1Pid} = lists:keyfind( P1, 1, PlayerList ),
+    P1Pid ! {end_tournament, self(), P1, Tid},
+
+    {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P2, [] ),
+    case NewOpponent of 
+    	undefined ->
+    	    %% Send Player 2 a tournament_over message since the tournament
+    	    %% ended
+	    io:format( utils:timestamp() ++ ": ~p won tournament ~p!", [P2, Tid] ),
+    	    {P2, P2Pid} = lists:keyfind( P2, 1, PlayerList ),
+    	    P2Pid ! {end_tournament, self(), P2, Tid},
+
+    	    %% The tournament is over, Player 1 won, update the tournament
+    	    ets:insert(?TournamentInfo, {Tid, T#tournament{bracket = NewBracket,
+							   status = completed,
+							   winner = P2}}),
+	    %% Update tournament win stat
+	    ets:insert(?UserInfo, {P2, P2Info#user{tournaments_won = P2Info#user.tournaments_won + 1}});
+    	none ->
+    	    %% The next round opponent hasn't finished the previous match yet
+    	    %% Do nothing...
+    	    ok;
+    	_ ->
+    	    %% Oh good, already have a next opponent!  Let's start up this match
+    	    NewGid = make_ref(),
+    	    Dice = generateDice(),
+    	    NewMatch = #match{ p1 = P2, p2 = NewOpponent,
+    			       p1ListOfDice = Dice, p2ListOfDice = Dice },
+    	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
+    	    sendDice( Tid, NewGid, NewMatch, 5, 5 )
     end.
+
     
 				     
     
