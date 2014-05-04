@@ -93,19 +93,19 @@ main([StrNodeName]) ->
 init({}) ->
     %% UserInfo will hold 
     %% Username: user record (see above)
-    ets:new(?UserInfo, [set, protected, named_table]),
+    ets:new(?UserInfo, [set, public, named_table]),
 
     %% TournamentInfo will hold tid : #tournament
-    ets:new(?TournamentInfo, [set, protected, named_table]),
+    ets:new(?TournamentInfo, [set, public, named_table]),
 
     %% Just some timeout references
-    ets:new(?TimeOutRefs, [set, protected, named_table]),
+    ets:new(?TimeOutRefs, [set, public, named_table]),
 
     %% {Tid, Gid} : Match
-    ets:new(?MatchTable, [set, protected, named_table]),
+    ets:new(?MatchTable, [set, public, named_table]),
 
     %% A dictionary of Username:{Pid, MonitorRef, LoginTicket}
-    ets:new(?CurrentPlayerLoginInfo, [set, protected, named_table]),
+    ets:new(?CurrentPlayerLoginInfo, [set, public, named_table]),
 
     io:format(utils:timestamp() ++ ": all ets tables succesfully initialized~n"),
 
