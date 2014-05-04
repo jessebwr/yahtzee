@@ -232,6 +232,12 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 		    %% Since they accepted, add them to the dictionary of players
 		    NewListOfPlayers = [ {Username, Pid} | T#tournament.listOfPlayers],
 
+		    %% Add to their stats
+		    [{Username, PlayerInfo#user{tournaments_played = TsPlayed}}] = 
+			ets:lookup(?UserInfo, Username),
+		    ets:insert(?UserInfo, {Username, 
+					   PlayerInfo#user{tournaments_played = TsPlayed + 1}}),
+
 		    %% If we have enough players, start the tournament
 		    NumPlayersReplied = T#tournament.numPlayersReplied + 1,
 		    case NumPlayersReplied == T#tournament.numNeededReplies of
@@ -1053,7 +1059,10 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     	    %% The tournament is over, Player 1 won, update the tournament
     	    ets:insert(?TournamentInfo, {Tid, T#tournament{bracket = NewBracket,
 							   status = completed,
-							   winner = P1}});
+							   winner = P1}}),
+	    %% Update tournament win stat
+	    ets:insert(?UserInfo, {P1, P1Info#user{tournaments_won = P1Info#user.tournaments_won + 1}});
+	
     	none ->
     	    %% The next round opponent hasn't finished the previous match yet
     	    %% Do nothing...
@@ -1099,7 +1108,9 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     	    %% The tournament is over, Player 1 won, update the tournament
     	    ets:insert(?TournamentInfo, {Tid, T#tournament{bracket = NewBracket,
 							   status = completed,
-							   winner = P2}});
+							   winner = P2}}),
+	    %% Update tournament win stat
+	    ets:insert(?UserInfo, {P2, P2Info#user{tournaments_won = P2Info#user.tournaments_won + 1}});
     	none ->
     	    %% The next round opponent hasn't finished the previous match yet
     	    %% Do nothing...
