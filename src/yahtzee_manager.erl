@@ -148,15 +148,26 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
             {noreply, S};
 
           [{Username, {Password, _, _, _, _}}] ->
-            io:format(utils:timestamp() ++ ": ~p has logged in before, now logging them back in~n", [Username]),
+            case Password == cheater of
+              true ->
+                {noreply, S};
+              false ->
+                io:format(utils:timestamp() ++ ": ~p has logged in before, now logging them back in~n", [Username]),
 
-            %% Monitoring it and stting up its current info
-            MonitorRef = monitor(process, Pid),
-            ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
+                %% Monitoring it and stting up its current info
+                MonitorRef = monitor(process, Pid),
+                ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
+                UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
+                UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
+                lists:foreach(fun({Tid, Gid}) -> [{{Tid, Gid},Match}] = ets:lookup(?MatchTable),
+                                                 start_matches(Tid, [[Gid, Match]]) end, UserMatchesP1),
+                lists:foreach(fun({Tid, Gid}) -> [{{Tid, Gid},Match}] = ets:lookup(?MatchTable),
+                                                 start_matches(Tid, [[Gid, Match]]) end, UserMatchesP2),
 
-            %% Messaging that they are logged in
-            Pid ! {logged_in, self(), Username, LoginTicket},
-            {noreply, S};
+                %% Messaging that they are logged in
+                Pid ! {logged_in, self(), Username, LoginTicket},
+                {noreply, S}
+              end;
 
           %% They didn't give the right password
           [{Username, {_DiffPassword, _, _, _, _}}] ->
@@ -598,14 +609,59 @@ handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
     {noreply, S};
 
 
+%% P1 wins, P2 loses
+handle_info({Tid, NewGid, P1, P2}, S) ->
+  ets:delete(?TimeOutRefs, {P2, Tid, NewGid}),
+  NewMatch = #match{p1 = P1,
+        p2 = P2,
+        currentGame = 0,
+        p2Win = 0,
+        p1Win = 1},
+  match_ended(Tid, NewMatch),
+  {noreply, S};
+
+
 handle_info(MSG, S) ->
     io:format(utils:timestamp() ++ ": not recognized message: ~p~n", [MSG]),
     {noreply, S}.
 
 %% TODO: actually implement
 kick_out_cheater( Username ) ->
-    %% Kick them out of all active matches
-    ok.
+    User = ets:lookup(?UserInfo, Username),
+    NewUser = User#user{password = cheater},
+    ets:insert(?UserInfo, NewUser),
+    UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
+    UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
+    lists:foreach(fun( [Tid, Gid] ) -> handle_kicked_game(Tid, Gid, Username, 1) end, UserMatchesP1),
+    lists:foreach(fun( [Tid, Gid] ) -> handle_kicked_game(Tid, Gid, Username, 2) end, UserMatchesP2).
+
+handle_kicked_game(Tid, Gid, _Username, 1) ->
+    [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
+    ets:delete(?MatchTable, {Tid, Gid} ),
+
+    P1 = M#match.p1,
+    P2 = M#match.p2,
+    NewCurrentGame = M#match.currentGame + 1,
+    NewMatch = #match{p1 = P1,
+            p2 = P2,
+            currentGame = NewCurrentGame,
+            p2Win = 1,
+            p1Win = 0},
+    match_ended(Tid, NewMatch);
+
+handle_kicked_game(Tid, Gid, _Username, 2) ->
+    [{_Key, M}] = ets:lookup(?MatchTable, {Tid, Gid}),
+    ets:delete(?MatchTable, {Tid, Gid} ),
+
+    P1 = M#match.p1,
+    P2 = M#match.p2,
+    NewCurrentGame = M#match.currentGame + 1,
+    NewMatch = #match{p1 = P1,
+            p2 = P2,
+            currentGame = NewCurrentGame,
+            p2Win = 0,
+            p1Win = 1},
+    match_ended(Tid, NewMatch).
 
 handle_gone(Username) ->
     UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
@@ -646,7 +702,7 @@ handle_gone_game(Tid, Gid, _Username, 1) ->
 
     	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
     	    {ok, TimerRef} = timer:send_after(60000, {Tid, NewGid, P2, P1}), %Make Handler for this
-    	    ets:insert(?TimeOutRefs, {P1, TimerRef})
+    	    ets:insert(?TimeOutRefs, {{P1, Tid, NewGid}, TimerRef})
     end;
 
 handle_gone_game(Tid, Gid, _Username, 2) ->
@@ -680,8 +736,8 @@ handle_gone_game(Tid, Gid, _Username, 2) ->
 			      p1Win = P1Win},
 
 	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
-	    {ok, TimerRef} = timer:send_after(60000, {Tid, NewGid, P2, P1}), % If it times out, we need P2 to win the match
-	    ets:insert(?TimeOutRefs, {P2, TimerRef})
+	    {ok, TimerRef} = timer:send_after(60000, {Tid, NewGid, P1, P2}), % If it times out, we need P2 to win the match
+	    ets:insert(?TimeOutRefs, {{P2, Tid, NewGid}, TimerRef})
     end.
 
 
@@ -912,17 +968,34 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
 	    start_tiebreak_match( Tid, NewMatch )
     end.
 
-
-start_tiebreak_match( Tid, Match ) ->
-    ok.
+%% For a match that ended in a tie, run the match again in "tiebreak mode"
+%% where the players use disparate dice pools
+start_tiebreak_match( Tid, #match{p1 = P1, p2 = P2} ) ->
+    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true},
+    Gid = make_ref(),
+    ets:insert(?MatchTable,
+	       {{Tid, Gid}, NewMatch#match{p1ListOfDice = generateDice(),
+				      p2ListOfDice = generateDice()}}),
+    sendDice( Tid, Gid, NewMatch, 5, 5 ).
+    
 
 start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 				     p1Win = P1Win, p2Win = P2Win,
-				     p1 = P1, p2 = P2}) ->
+				     p1 = P1, p2 = P2,
+				     isTiebreak = IsTiebreak}) ->
+
     Gid = make_ref(),
-    Dice = generateDice(),
+
+    {P1Dice, P2Dice} = if
+			   IsTiebreak ->
+			       {generateDice(), generateDice()};
+			   not IsTiebreak ->
+			       Dice = generateDice(),
+			       {Dice, Dice}
+		       end,
+
     NewMatch = #match{ p1 = P1, p2 = P2,
-		       p1ListOfDice = Dice, p2ListOfDice = Dice,
+		       p1ListOfDice = P1Dice, p2ListOfDice = P2Dice,
 		       p1Win = P1Win, p2Win = P2Win, 
 		       currentGame = CurrentGame + 1 },
     ets:insert(?MatchTable, {{Tid,Gid}, NewMatch }),
@@ -947,8 +1020,8 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
 					       P1Info#user.match_losses + 1}}),
 
     [{Tid, T = #tournament{bracket = Bracket, listOfPlayers = PlayerList}}] =
-	ets:lookup(?TournamentInfo, Tid),
-    
+  	ets:lookup(?TournamentInfo, Tid),
+      
     %% Send Player 2 a tournament_over message since they just got knocked out
     %% of the single-elimination tournament
     {P2, P2Pid} = lists:keyfind( P2, 0, PlayerList ),
@@ -956,28 +1029,28 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
 
     {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P1, [] ),
     case NewOpponent of 
-	undefined ->
-	    %% Send Player 1 a tournament_over message since the tournament
-	    %% ended
-	    {P1, P1Pid} = lists:keyfind( P1, 0, PlayerList ),
-	    P1Pid ! {end_tournament, self(), P1, Tid},
+    	undefined ->
+    	    %% Send Player 1 a tournament_over message since the tournament
+    	    %% ended
+    	    {P1, P1Pid} = lists:keyfind( P1, 0, PlayerList ),
+    	    P1Pid ! {end_tournament, self(), P1, Tid},
 
-	    %% The tournament is over, Player 1 won, update the tournament
-	    ets:insert(Tid, T#tournament{bracket = NewBracket,
-					 status = completed,
-					 winner = P1});
-	none ->
-	    %% The next round opponent hasn't finished the previous match yet
-	    %% Do nothing...
-	    ok;
-	_ ->
-	    %% Oh good, already have a next opponent!  Let's start up this match
-	    NewGid = make_ref(),
-	    Dice = generateDice(),
-	    NewMatch = #match{ p1 = P1, p2 = NewOpponent,
-			       p1ListOfDice = Dice, p2ListOfDice = Dice },
-	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
-	    sendDice( Tid, NewGid, NewMatch, 5, 5 )
+    	    %% The tournament is over, Player 1 won, update the tournament
+    	    ets:insert(Tid, T#tournament{bracket = NewBracket,
+    					 status = completed,
+    					 winner = P1});
+    	none ->
+    	    %% The next round opponent hasn't finished the previous match yet
+    	    %% Do nothing...
+    	    ok;
+    	_ ->
+    	    %% Oh good, already have a next opponent!  Let's start up this match
+    	    NewGid = make_ref(),
+    	    Dice = generateDice(),
+    	    NewMatch = #match{ p1 = P1, p2 = NewOpponent,
+    			       p1ListOfDice = Dice, p2ListOfDice = Dice },
+    	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
+    	    sendDice( Tid, NewGid, NewMatch, 5, 5 )
     end.
     
 				     
@@ -1229,5 +1302,3 @@ generateDice() ->
     DiceList = [random:uniform(6) || _ <- lists:seq(1, 15)],
     io:format("THE FULL DICELIST IS: ~p~n", [DiceList]),
     DiceList.
-
-
