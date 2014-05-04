@@ -13,6 +13,15 @@ ets tables to store the state variables for things lke the
 tournament, players, matches, and timeout information. We also
 use records a lot, which are glorified tuples but are also similar
 to structs in C.
+Please use the yahtzee_player1.erl module when trying out our
+player AI, because player2 is a very poor player.
+Also, you'll not that at the end of the tournaments our players
+print out
+
+"Got a message... Derp?"
+
+This comes from the end_tournament message which our players are not
+required to take care of, so it gets caught by our catch-all case.
 
 
 
@@ -24,7 +33,15 @@ erl -noshell -run yahtzee_manager main <MANAGERNAME>
 Then start as many players as you want by typing
 erl -noshell -run -yahtzee_player1/2 main <PLAYERNAME> <USERNAME> <PASSWORD> <MANAGERNAME>
 
-Finally, once you have made all of the players you'd like to join.
+Finally, once you have made all of the players that you'd like to join, create an Erlang
+node with the following line of Terminal code
+
+erl -sname <NODENAME>
+
+and then from within this Erlang node send a request_tournament message to the tournament manager
+{yahtzee_manager, <MANAGERNAME} ! {request_tournament, self(), {<NUMPLAYERS>, <NUMGAMES>}}.
+
+
 
 ----utils.erl----
 
