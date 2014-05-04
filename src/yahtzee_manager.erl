@@ -297,7 +297,7 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 %% Handle a non-scoring message, where scorecard-line is 0
 handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0} }, S) ->
-    io:format(utils:timestamp() ++ ": received play_action message from ~p with the following info~nTid: ~p~n Gid: ~p~nRollNum: ~p~n DiceToKeep: ~p~nTid: ~p~n Scorecard Line: 0~n",
+    io:format(utils:timestamp() ++ ": received play_action message from ~p with the following info~nTid: ~p~n Gid: ~p~nRollNum: ~p~n DiceToKeep: ~p~nScorecard Line: ~p~n",
 	      [Username, Tid, Gid, RollNum, DiceToKeep, 0]),
 
     case ets:lookup(?MatchTable, {Tid, Gid}) of
@@ -315,13 +315,16 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 		P1 ->
 		    case RollNum of
 			P1RollNum when RollNum =< 3, RollNum > 0 ->
-			    {NewDiceList, NewDiceToSend} = 
+			    NewDiceList = 
 				updateDiceList( M#match.p1ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p1RollNum = RollNum + 1,
 					       p1ListOfDice = NewDiceList},
+          io:format("UPDATE DICELIST RETURNS ~p~n", [NewDiceList]),
 			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
+          DiceToSend = lists:sublist(NewDiceList, 5),
+          io:format(utils:timestamp() ++ ": sending play_request message to ~p with dice ~p~n", [P1, DiceToSend]),
 			    Pid ! {play_request, self(), Username,
-				   {Ref, Tid, Gid, RollNum + 1, NewDiceToSend,
+				   {Ref, Tid, Gid, RollNum + 1, DiceToSend,
 				    M#match.p1ScoreCard, M#match.p2ScoreCard}};
 			_ ->
 			    kick_out_cheater( Username )
@@ -329,13 +332,16 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 		P2 ->
 		    case RollNum of
 			P2RollNum when RollNum =< 3, RollNum > 0 ->
-			    {NewDiceList, NewDiceToSend} = 
+			    NewDiceList = 
 				updateDiceList( M#match.p2ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p2RollNum = RollNum + 1,
 					       p2ListOfDice = NewDiceList},
+          io:format("UPDATE DICELIST RETURNS ~p~n", [NewDiceList]),
 			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
+          DiceToSend = lists:sublist(NewDiceList, 5),
+          io:format(utils:timestamp() ++ ": sending play_request message to ~p with dice ~p~n", [P2, DiceToSend]),
 			    Pid ! {play_request, self(), Username,
-				   {Ref, Tid, Gid, RollNum + 1, NewDiceToSend,
+				   {Ref, Tid, Gid, RollNum + 1, DiceToSend,
 				    M#match.p2ScoreCard, M#match.p1ScoreCard}};
 			_ ->
 			    kick_out_cheater( Username )
@@ -353,7 +359,7 @@ handle_info( {play_action, _Pid, Username,
     io:format(utils:timestamp() ++ ": received play_action message from ~p "
 	      ++ "with the following info~nTid: ~p~n"
 	      ++ "Gid: ~p~nRollNum: ~p~n"
-	      ++ "DiceToKeep: ~p~nTid: ~p~n"
+	      ++ "DiceToKeep: ~p~n"
 	      ++ "Scorecard Line: ~p~n",
                         [Username, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine]),
     case ets:lookup(?MatchTable, {Tid, Gid}) of
@@ -362,12 +368,12 @@ handle_info( {play_action, _Pid, Username,
 	    %% doesn't specify any action
 	    ok;
 
-	[{Tid, Gid}, Match = #match{p1 = Username,
+	[{{Tid, Gid}, Match = #match{p1 = Username,
 				    p2RollNum = P2RollNum,
 				    p1ScoreCard = P1ScoreCard, 
 				    p2ScoreCard = P2ScoreCard,
 				    p1ListOfDice = P1ListOfDice
-				   }]
+				   }}]
 	->
 	    %% Yay it's a real game!  And we just heard from player 1, so that's good.
 	    %% Case of player 2 is handled below.
@@ -437,12 +443,12 @@ handle_info( {play_action, _Pid, Username,
 	    end; %% case nth(ScoreCardLine, P1ScoreCard)
 
 
-	[{Tid, Gid}, Match = #match{p2 = Username, 
+	[{{Tid, Gid}, Match = #match{p2 = Username, 
 				    p1RollNum = P1RollNum,
 				    p1ScoreCard = P1ScoreCard,
 				    p2ScoreCard = P2ScoreCard,
 				    p2ListOfDice = P2ListOfDice
-				    }]
+				    }}]
 	->
 	    %% Yay it's a real game!  And we just heard from player 2.
 	    %% Case for Player 1 is handled above.
@@ -1012,20 +1018,13 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
     P1DiceToSend = lists:sublist(M#match.p1ListOfDice, NumDiceToSendP1),
     P2DiceToSend = lists:sublist(M#match.p2ListOfDice, NumDiceToSendP2),
 
-    P1NewBackups = lists:sublist(M#match.p1ListOfDice, NumDiceToSendP1 + 1,
-				 length(M#match.p1ListOfDice)),
-    P2NewBackups = lists:sublist(M#match.p2ListOfDice, NumDiceToSendP2 + 1, 
-				 length(M#match.p2ListOfDice)),
-
     P1Msg = {make_ref(), Tid, Gid, M#match.p1RollNum, P1DiceToSend, 
 	     M#match.p1ScoreCard, M#match.p2ScoreCard},
     P2Msg = {make_ref(), Tid, Gid, M#match.p2RollNum, P2DiceToSend, 
 	     M#match.p2ScoreCard, M#match.p1ScoreCard},
 
-    ets:insert(?MatchTable, {{Tid, Gid}, M#match{p1RollNum = M#match.p1RollNum + 1, 
-						 p2RollNum = M#match.p1RollNum + 1,
-						 p1ListOfDice = P1NewBackups,
-						 p2ListOfDice = P2NewBackups}}),
+    ets:insert(?MatchTable, {{Tid, Gid}, M#match{p1RollNum = M#match.p1RollNum, 
+						 p2RollNum = M#match.p2RollNum}}),
 
     %%{KEY, VALUE}
     Pid1 ! {play_request, self(), P1, P1Msg},
@@ -1211,26 +1210,24 @@ scoreFullCard( ScoreCard ) ->
 
 
 updateDiceList( DiceList, DiceToKeep ) ->
-    updateDiceList( DiceList, DiceToKeep, 0, [] ).
+    updateDiceList( DiceList, DiceToKeep, [] ).
 
-updateDiceList( DiceList, [], 0, DiceToSend ) ->
-    {DiceList, DiceToSend};
+updateDiceList( DiceList, [], UsedDice ) ->
+    UsedDice ++ DiceList;
 
-updateDiceList( [FirstDie|RestDice], [FirstToKeep|RestToKeep], NumDiceToSend, [] ) ->
+updateDiceList( [FirstDie|RestDice], [FirstToKeep|RestToKeep], RemovedDice ) ->
     case FirstToKeep of
 	true ->
-	    {DiceList, NewDiceToSend} = updateDiceList( RestDice, RestToKeep, NumDiceToSend, [] ),
-	    {[FirstDie | DiceList], NewDiceToSend};
+	    updateDiceList( RestDice, RestToKeep, RemovedDice ++ [FirstDie] );
 	false ->
-	    updateDiceList( RestDice, RestToKeep, NumDiceToSend + 1, [] )
-    end;
-
-updateDiceList( [FirstDie|RestDice], [], NumDiceToSend, DiceToSend ) ->
-    updateDiceList( RestDice, [], NumDiceToSend - 1, [FirstDie|DiceToSend] ).
+	    updateDiceList( RestDice, RestToKeep, RemovedDice )
+    end.
 
 generateDice() ->
     {A, B, C} = now(),
     random:seed(A, B, C),
-    [random:uniform(6) || _ <- lists:seq(1, 15)].
+    DiceList = [random:uniform(6) || _ <- lists:seq(1, 15)],
+    io:format("THE FULL DICELIST IS: ~p~n", [DiceList]),
+    DiceList.
 
 

@@ -225,8 +225,8 @@ handle_info({play_request, Pid, Username, {Ref, Tid, Gid, RollNumber, Dice,
   case Username of
     TrueUsername ->
       {DiceToKeep, ScorecardLine} = playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard),
-      io:format(utils:timestamp() ++ ": sending play_action message with the following " ++
-                                      "dice to keep ~p~n", [DiceToKeep]),
+      io:format(utils:timestamp() ++ ": sending play_action message with the scorecard " ++
+                                      "line ~p and dice to keep ~p~n", [ScorecardLine, DiceToKeep]),
       Pid ! {play_action, self(), Username, {Ref, Tid, Gid, RollNumber,
                                                         DiceToKeep, ScorecardLine}},
       {noreply, State};
