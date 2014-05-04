@@ -286,7 +286,7 @@ handle_info({reject_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 %% Handle a non-scoring message, where scorecard-line is 0
 handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0} }, S) ->
     io:format(utils:timestamp() ++ ": received play_action message from ~p with the following info~nTid: ~p~n Gid: ~p~nRollNum: ~p~n DiceToKeep: ~p~nTid: ~p~n Scorecard Line: 0~n",
-	      [Username, Tid, Gid, RollNum, DiceToKeep]),
+	      [Username, Tid, Gid, RollNum, DiceToKeep, 0]),
 
     case ets:lookup(?MatchTable, {Tid, Gid}) of
 	[] ->
@@ -529,7 +529,12 @@ handle_gone_game(Tid, Gid, _Username, 1) ->
 
     case P2Win > (GamesPerMatch / 2) of
     	true ->
-    	    handle_match_over(Tid, Gid, P2, P1);
+          NewMatch = #match{p1 = P1,
+          p2 = P2,
+          currentGame = NewCurrentGame,
+          p2Win = P2Win,
+          p1Win = P1Win},
+    	    match_ended(Tid, Gid, NewMatch);
 
     	false ->
     	    %% Just make them lose the game
@@ -559,7 +564,13 @@ handle_gone_game(Tid, Gid, _Username, 2) ->
 
     case P1Win > (GamesPerMatch / 2) of
 	true ->
-	    handle_match_over(Tid, Gid, P1, P2);
+
+      NewMatch = #match{p1 = P1,
+          p2 = P2,
+          currentGame = NewCurrentGame,
+          p2Win = P2Win,
+          p1Win = P1Win},
+	    match_ended(Tid, Gid, NewMatch);
 
 	false ->
 	    %% Just make them lose the game
