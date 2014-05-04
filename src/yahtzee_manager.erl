@@ -330,10 +330,10 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 				updateDiceList( M#match.p1ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p1RollNum = RollNum + 1,
 					       p1ListOfDice = NewDiceList},
-          io:format("UPDATE DICELIST RETURNS ~p~n", [NewDiceList]),
+			    io:format("UPDATE DICELIST RETURNS ~p~n", [NewDiceList]),
 			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
-          DiceToSend = lists:sublist(NewDiceList, 5),
-          io:format(utils:timestamp() ++ ": sending play_request message to ~p with dice ~p~n", [P1, DiceToSend]),
+			    DiceToSend = lists:sublist(NewDiceList, 5),
+			    io:format(utils:timestamp() ++ ": sending play_request message to ~p with dice ~p~n", [P1, DiceToSend]),
 			    Pid ! {play_request, self(), Username,
 				   {Ref, Tid, Gid, RollNum + 1, DiceToSend,
 				    M#match.p1ScoreCard, M#match.p2ScoreCard}};
@@ -409,7 +409,7 @@ handle_info( {play_action, _Pid, Username,
             				    %% Player 2 has already scored this turn.
             				    %% So we can go ahead and start the next
             				    %% turn
-                        io:format("About to start new turn in game P2rollnum is 0~n"),
+					    io:format("About to start new turn in game P2rollnum is 0~n"),
             				    start_new_turn_in_game( Tid, Gid, Match, 
             							    NewP1ScoreCard, 1 );
             				_ ->
@@ -485,7 +485,7 @@ handle_info( {play_action, _Pid, Username,
 				    %% Player 1 has already scored this turn.
 				    %% So we can go ahead and start the next
 				    %% turn
-            io:format("About to start new turn in game P1rollnum is 0~n"),
+				    io:format("About to start new turn in game P1rollnum is 0~n"),
 				    start_new_turn_in_game( Tid, Gid, Match, 
 							    NewP2ScoreCard, 2 );
 				_ ->
@@ -1061,26 +1061,26 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
 
 start_new_turn_in_game( Tid, Gid, Match, NewP1ScoreCard, 1 ) ->
     Dice = generateDice(),
-    ets:insert(?MatchTable, {{Tid, Gid},
-			     Match#match{ p1RollNum = 1,
-					  p2RollNum = 1,
-					  p1ScoreCard = NewP1ScoreCard,
-					  p1ListOfDice = Dice,
-					  p2ListOfDice = Dice
-					}}),
-    sendDice( Tid, Gid, Match, 5, 5 );
+    NewMatch = Match#match{ p1RollNum = 1,
+			    p2RollNum = 1,
+			    p1ScoreCard = NewP1ScoreCard,
+			    p1ListOfDice = Dice,
+			    p2ListOfDice = Dice
+			  },
+    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
+    sendDice( Tid, Gid, NewMatch, 5, 5 );
 
 
 start_new_turn_in_game( Tid, Gid, Match, NewP2ScoreCard, 2 ) ->
     Dice = generateDice(),
-    ets:insert(?MatchTable, {{Tid, Gid},
-			     Match#match{ p1RollNum = 1,
-					  p2RollNum = 1,
-					  p2ScoreCard = NewP2ScoreCard,
-					  p1ListOfDice = Dice,
-					  p2ListOfDice = Dice
-					}}),
-    sendDice( Tid, Gid, Match, 5, 5 ).
+    NewMatch = Match#match{ p1RollNum = 1,
+			    p2RollNum = 1,
+			    p2ScoreCard = NewP2ScoreCard,
+			    p1ListOfDice = Dice,
+			    p2ListOfDice = Dice
+					}
+    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch }),
+    sendDice( Tid, Gid, NewMatch, 5, 5 ).
 							       
 
 
