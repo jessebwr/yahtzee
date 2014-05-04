@@ -1019,7 +1019,8 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
     NewMatch = #match{ p1 = P1, p2 = P2,
 		       p1ListOfDice = P1Dice, p2ListOfDice = P2Dice,
 		       p1Win = P1Win, p2Win = P2Win, 
-		       currentGame = CurrentGame + 1 },
+		       currentGame = CurrentGame + 1,
+		       isTiebreak = IsTiebreak },
     ets:insert(?MatchTable, {{Tid,Gid}, NewMatch }),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
 
