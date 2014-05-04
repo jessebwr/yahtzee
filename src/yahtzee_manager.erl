@@ -152,7 +152,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
             Pid ! {logged_in, self(), Username, LoginTicket},
             {noreply, S};
 
-          [{Username, {Password, _, _, _, _}}] ->
+          [{Username, #user{password = Password}}] ->
             case Password == cheater of
               true ->
                 {noreply, S};
@@ -176,7 +176,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
               end;
 
           %% They didn't give the right password
-          [{Username, {_DiffPassword, _, _, _, _}}] ->
+          [{Username, _User}] ->
             io:format(utils:timestamp() ++ ": Incorrect password entered!~n"),
             Pid ! {incorrect_password, Username},
             {noreply, S}
@@ -609,7 +609,7 @@ handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
     demonitor(MonitorRef, [flush]),
     %% Look up the username by pattern matching on the record stored in the 
     %% ets table CurrentPlayerLoginInfo.
-    Username = hd( ets:match( ?CurrentPlayerLoginInfo, {'$1', {Pid, '_', '_'} } ) ),
+    [Username] = hd( ets:match( ?CurrentPlayerLoginInfo, {'$1', {Pid, '_', '_'} } ) ),
     io:format(utils:timestamp() ++ ": received DOWN message from ~p" ++
 		  "with Pid ~p~n", [Username, Pid]),
     ets:delete(?NotDead, Username),
