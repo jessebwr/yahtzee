@@ -234,8 +234,11 @@ handle_info({play_request, Pid, Username, {Ref, Tid, Gid, RollNumber, Dice,
       io:format(utils:timestamp() ++ ": incorrect username received from tournament manager with pid ~p! 
                                         Trickery is afoot~n", [Pid]),
       {noreply, State}
-  end.
+  end;
 
+handle_info(_Derp, S) ->
+  io:format(utils:timestamp() ++ ": Something went wrong? Derp?~n"),
+  {noreply, S}.
 
 
 
