@@ -1037,7 +1037,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
       
     %% Send Player 2 a tournament_over message since they just got knocked out
     %% of the single-elimination tournament
-    {P2, P2Pid} = lists:keyfind( P2, 0, PlayerList ),
+    {P2, P2Pid} = lists:keyfind( P2, 1, PlayerList ),
     P2Pid ! {end_tournament, self(), P2, Tid},
 
     {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P1, [] ),
@@ -1045,7 +1045,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     	undefined ->
     	    %% Send Player 1 a tournament_over message since the tournament
     	    %% ended
-    	    {P1, P1Pid} = lists:keyfind( P1, 0, PlayerList ),
+    	    {P1, P1Pid} = lists:keyfind( P1, 1, PlayerList ),
     	    P1Pid ! {end_tournament, self(), P1, Tid},
 
     	    %% The tournament is over, Player 1 won, update the tournament
@@ -1081,7 +1081,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
       
     %% Send Player 2 a tournament_over message since they just got knocked out
     %% of the single-elimination tournament
-    {P1, P1Pid} = lists:keyfind( P1, 0, PlayerList ),
+    {P1, P1Pid} = lists:keyfind( P1, 1, PlayerList ),
     P1Pid ! {end_tournament, self(), P1, Tid},
 
     {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P2, [] ),
@@ -1089,7 +1089,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     	undefined ->
     	    %% Send Player 2 a tournament_over message since the tournament
     	    %% ended
-    	    {P2, P2Pid} = lists:keyfind( P2, 0, PlayerList ),
+    	    {P2, P2Pid} = lists:keyfind( P2, 1, PlayerList ),
     	    P2Pid ! {end_tournament, self(), P2, Tid},
 
     	    %% The tournament is over, Player 1 won, update the tournament
