@@ -978,11 +978,13 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
 %% For a match that ended in a tie, run the match again in "tiebreak mode"
 %% where the players use disparate dice pools
 start_tiebreak_match( Tid, #match{p1 = P1, p2 = P2} ) ->
+    io:format( utils:timestamp() ++ ": Starting a tiebreak match for tournament ~p between players ~p and ~p.", [Tid, P1, P2
+] ),
     NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true},
     Gid = make_ref(),
     ets:insert(?MatchTable,
 	       {{Tid, Gid}, NewMatch#match{p1ListOfDice = generateDice(),
-				      p2ListOfDice = generateDice()}}),
+					   p2ListOfDice = generateDice()}}),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
     
 
@@ -996,7 +998,9 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 
     {P1Dice, P2Dice} = if
 			   IsTiebreak ->
-			       {generateDice(), generateDice()};
+			       P1D = generateDice(),
+			       P2D = generateDice(),
+			       {P1D, P2D};
 			   not IsTiebreak ->
 			       Dice = generateDice(),
 			       {Dice, Dice}
