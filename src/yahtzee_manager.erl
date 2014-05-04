@@ -612,7 +612,7 @@ handle_info({'DOWN', MonitorRef,_,Pid,_}, S) ->
     Username = hd( ets:match( ?CurrentPlayerLoginInfo, {'$1', {Pid, '_', '_'} } ) ),
     io:format(utils:timestamp() ++ ": received DOWN message from ~p" ++
 		  "with Pid ~p~n", [Username, Pid]),
-    io:format("~p~n", [ets:tab2list(moo)]),
+    io:format("~p~n", [ets:tab2list(?NotDead)]),
     ets:delete(?NotDead, Username),
     handle_gone( Username ),
     {noreply, S};
