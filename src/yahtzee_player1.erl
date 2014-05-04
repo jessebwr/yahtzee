@@ -270,6 +270,7 @@ playerAI(RollNumber, Dice, Scorecard, OpponentsScorecard) when (length(Dice) == 
   case RollNumber of
     3 ->
       {_EV, Choice} = yahtzee_chooser:decide_choice(Scorecard, OpponentsScorecard, 3, Dice),
+      io:format("TURN THREE CHOICE: ~p~n", [Choice]),
       {[true, true, true, true, true], Choice};
     _ ->
       {_EV, KeepDice, _ReturnDice} = yahtzee_chooser:decide_choice(Scorecard, OpponentsScorecard, RollNumber, Dice),
