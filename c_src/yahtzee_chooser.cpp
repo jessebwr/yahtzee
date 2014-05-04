@@ -289,7 +289,7 @@ const std::vector<double> heuristicVector {1.5, 5.2, 8.5,
 //                                            18.0, 10.0, 20.5, 
 //                                            24.0, 29.0, 10.0, 
 //                                            21.0};
-
+//
 
 const std::vector<double> decayVector{1.0284, 0.9823, 0.9753,
                                       0.9710, 0.9683, 0.96654,
