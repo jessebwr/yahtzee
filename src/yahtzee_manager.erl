@@ -638,7 +638,7 @@ start_tournament(Tid, T) ->
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
     io:format("UpdatedBracket: ~p~n", [UpdatedBracket]),
-    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, $2 } ),
+    Matches = ets:match( ?MatchTable, { {Tid, '$1'}, '$2' } ),
     io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
     NewT = T#tournament{ started = true,
 			 bracket = UpdatedBracket },
@@ -758,7 +758,7 @@ sendDice(Tid, Gid, M, NumDiceToSendP1, NumDiceToSendP2) ->
     P2 = M#match.p2,
 
     [{P1, {Pid1, _MonitorRef1, _LoginTicket1}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
-    [{P1, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P1),
+    [{P2, {Pid2, _MonitorRef2, _LoginTicket2}}] = ets:lookup(?CurrentPlayerLoginInfo, P2),
 
     P1DiceToSend = lists:sublist(M#match.p1ListOfDice, NumDiceToSendP1),
     P2DiceToSend = lists:sublist(M#match.p2ListOfDice, NumDiceToSendP2),
