@@ -968,17 +968,34 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
 	    start_tiebreak_match( Tid, NewMatch )
     end.
 
-
-start_tiebreak_match( Tid, Match ) ->
-    ok.
+%% For a match that ended in a tie, run the match again in "tiebreak mode"
+%% where the players use disparate dice pools
+start_tiebreak_match( Tid, #match{p1 = P1, p2 = P2} ) ->
+    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true},
+    Gid = make_ref(),
+    ets:insert(?MatchTable,
+	       {{Tid, Gid}, NewMatch#{p1ListOfDice = generateDice(),
+				      p2ListOfDice = generateDice()}}),
+    sendDice( Tid, Gid, NewMatch, 5, 5 ).
+    
 
 start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 				     p1Win = P1Win, p2Win = P2Win,
-				     p1 = P1, p2 = P2}) ->
+				     p1 = P1, p2 = P2,
+				     isTiebreak = IsTiebreak}) ->
+
     Gid = make_ref(),
-    Dice = generateDice(),
+
+    {P1Dice, P2Dice} = if
+			   IsTiebreak ->
+			       {generateDice(), generateDice()};
+			   not IsTiebreak ->
+			       Dice = generateDice(),
+			       {Dice, Dice}
+		       end,
+
     NewMatch = #match{ p1 = P1, p2 = P2,
-		       p1ListOfDice = Dice, p2ListOfDice = Dice,
+		       p1ListOfDice = P1Dice, p2ListOfDice = P2Dice,
 		       p1Win = P1Win, p2Win = P2Win, 
 		       currentGame = CurrentGame + 1 },
     ets:insert(?MatchTable, {{Tid,Gid}, NewMatch }),
@@ -1285,5 +1302,3 @@ generateDice() ->
     DiceList = [random:uniform(6) || _ <- lists:seq(1, 15)],
     io:format("THE FULL DICELIST IS: ~p~n", [DiceList]),
     DiceList.
-
-
