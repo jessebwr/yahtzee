@@ -325,7 +325,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 	    case Username of
 		P1 ->
 		    case RollNum of
-			P1RollNum when RollNum =< 3, RollNum > 0 ->
+			P1RollNum when RollNum < 3, RollNum > 0 ->
 			    NewDiceList = 
 				updateDiceList( M#match.p1ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p1RollNum = RollNum + 1,
@@ -342,7 +342,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 		    end;
 		P2 ->
 		    case RollNum of
-			P2RollNum when RollNum =< 3, RollNum > 0 ->
+			P2RollNum when RollNum < 3, RollNum > 0 ->
 			    NewDiceList = 
 				updateDiceList( M#match.p2ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p2RollNum = RollNum + 1,
