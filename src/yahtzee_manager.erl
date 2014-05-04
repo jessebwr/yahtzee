@@ -233,7 +233,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 		    NewListOfPlayers = [ {Username, Pid} | T#tournament.listOfPlayers],
 
 		    %% Add to their stats
-		    [{Username, PlayerInfo#user{tournaments_played = TsPlayed}}] = 
+		    [{Username, PlayerInfo = #user{tournaments_played = TsPlayed}}] = 
 			ets:lookup(?UserInfo, Username),
 		    ets:insert(?UserInfo, {Username, 
 					   PlayerInfo#user{tournaments_played = TsPlayed + 1}}),
