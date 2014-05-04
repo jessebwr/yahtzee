@@ -253,11 +253,11 @@ terminate(_Reason, _State) ->
 playerAI(RollNumber, Dice, _, _) when (length(Dice) == 5), RollNumber < 3 ->
   {[true, true, true, true, true], 0};
 playerAI(RollNumber, Dice, _, _) when (length(Dice) == 5), RollNumber == 3 ->
-  ScorecardValueList = ets:lookup(score_list, key),
+  [{key, ScorecardValueList}] = ets:lookup(score_list, key),
   case ScorecardValueList of
     [] ->
       ets:insert(score_list, {key, [1,2,3,4,5,6,7,8,9,10,11,12,13]}),
-      NewScorecardValueList = ets:lookup(score_list, key),
+      [{key, NewScorecardValueList}] = ets:lookup(score_list, key),
       Score = hd(NewScorecardValueList),
       NewScoreList = tl(NewScorecardValueList),
 
