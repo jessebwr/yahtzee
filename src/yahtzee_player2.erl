@@ -96,7 +96,7 @@
 
 main(Params) ->
   % table to store score line values
-  ets:new(score_list, [set, protected, named_table]),
+  ets:new(score_list, [set, public, named_table]),
   ets:insert(score_list, {key, [1,2,3,4,5,6,7,8,9,10,11,12,13]}),
   NodeName = hd(Params),
   Username = hd(tl(Params)),
