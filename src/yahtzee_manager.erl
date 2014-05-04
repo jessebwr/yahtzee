@@ -789,7 +789,8 @@ start_tournament(Tid, T) ->
 
     %% Pair off players according to a fixed single-elimination tournament
     %% bracket.
-    RoundOne = create_initial_bracket( ListOfPlayers, [], NumByesNeeded ),    
+    PlayerNames = lists:map( fun({Name, _Pid}) -> Name end, ListOfPlayers ),
+    RoundOne = create_initial_bracket( PlayerNames, [], NumByesNeeded ),    
 
     %% Once the players are paired off and the entire tournament bracket is
     %% created, we can handle bye-paired matches by advancing the real player
@@ -817,7 +818,7 @@ start_tournament(Tid, T) ->
     ets:insert(?TournamentInfo, {Tid, NewT}),
     io:format( utils:timestamp() ++ ": Calling start_matches~n" ),
     start_matches( Tid, Matches ),
-    T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, ListOfPlayers, blah}}.
+    T#tournament.pidThatRequested ! {tournament_started, self(), {Tid, PlayerNames, blah}}.
 
 
 
