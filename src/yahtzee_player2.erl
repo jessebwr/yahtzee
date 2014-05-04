@@ -225,8 +225,8 @@ handle_info({play_request, Pid, Username, {Ref, Tid, Gid, RollNumber, Dice,
 
 
 
-handle_info(_Derp, S) ->
-  io:format(utils:timestamp() ++ ": Something went wrong? Derp?~n"),
+handle_info(Derp, S) ->
+  io:format(utils:timestamp() ++ ": Got a message... ~p~n", [Derp]),
   {noreply, S}.
 
 
