@@ -146,7 +146,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
             %% Monitoring it and setting up its current info
             MonitorRef = monitor(process, Pid),
             ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
-            ets:insert(?NotDead, {Username}),
+            ets:insert(?NotDead, {Username, ok}),
 
             %% Messaging that they are logged in.
             Pid ! {logged_in, self(), Username, LoginTicket},
@@ -162,7 +162,7 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
                 %% Monitoring it and stting up its current info
                 MonitorRef = monitor(process, Pid),
                 ets:insert(?CurrentPlayerLoginInfo, {Username, {Pid, MonitorRef, LoginTicket}}),
-                ets:insert(?NotDead, {Username}),
+                ets:insert(?NotDead, {Username, ok}),
                 UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
                 UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
                 lists:foreach(fun({Tid, Gid}) -> [{{Tid, Gid},Match}] = ets:lookup(?MatchTable),
