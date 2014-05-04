@@ -341,7 +341,6 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 				updateDiceList( M#match.p1ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p1RollNum = RollNum + 1,
 					       p1ListOfDice = NewDiceList},
-			    io:format("UPDATE DICELIST RETURNS ~p~n", [NewDiceList]),
 			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
 			    DiceToSend = lists:sublist(NewDiceList, 5),
 			    io:format(utils:timestamp() ++ ": sending play_request message to ~p with dice ~p~n", [P1, DiceToSend]),
@@ -358,7 +357,6 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 				updateDiceList( M#match.p2ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p2RollNum = RollNum + 1,
 					       p2ListOfDice = NewDiceList},
-          io:format("UPDATE DICELIST RETURNS ~p~n", [NewDiceList]),
 			    ets:insert(?MatchTable, {{Tid, Gid}, NewMatch}),
           DiceToSend = lists:sublist(NewDiceList, 5),
           io:format(utils:timestamp() ++ ": sending play_request message to ~p with dice ~p~n", [P2, DiceToSend]),
@@ -388,7 +386,7 @@ handle_info( {play_action, _Pid, Username,
 	[] ->
 	    %% Invalid game that doesn't exist....  Ignore it since the protocol
 	    %% doesn't specify any action
-	    io:format("Unrecognized game~n"),
+	    io:format(utils:timestamp() ++ ": Unrecognized game~n"),
 	    ok;
 
 	[{{Tid, Gid}, Match = #match{p1 = Username,
@@ -421,13 +419,11 @@ handle_info( {play_action, _Pid, Username,
             				    %% Player 2 has already scored this turn.
             				    %% So we can go ahead and start the next
             				    %% turn
-					    io:format("About to start new turn in game P2rollnum is 0~n"),
             				    start_new_turn_in_game( Tid, Gid, Match, 
             							    NewP1ScoreCard, 1 );
             				_ ->
             				    %% Still waiting for Player 2 to score.
             				    %% Just update player 1's info in the record
-					    io:format("Player 1 just scored a turn.  Just updating their record.~n"),
             				    ets:insert(?MatchTable, {{Tid, Gid},
             							     Match#match{p1ScoreCard =
             									     NewP1ScoreCard,
@@ -436,7 +432,6 @@ handle_info( {play_action, _Pid, Username,
         			    end; %% case p2RollNum
 
 			false ->
-			    io:format("Player 1 is done with the game~n"),
 			    %% Player 1 is now done with this game.  Is Player 2?
 			    case lists:member(-1, P2ScoreCard) of
     				false ->
@@ -453,7 +448,6 @@ handle_info( {play_action, _Pid, Username,
     				true ->
     				    %% Nope, still waiting for Player 2.  Just
     				    %% update the match record
-				    io:format("Player 1 just scored a turn.  Just updating their record.~n"),
     				    ets:insert(?MatchTable, {{Tid, Gid},
     							     Match#match{p1ScoreCard =
     									     NewP1ScoreCard,
@@ -500,13 +494,11 @@ handle_info( {play_action, _Pid, Username,
 				    %% Player 1 has already scored this turn.
 				    %% So we can go ahead and start the next
 				    %% turn
-				    io:format("About to start new turn in game P1rollnum is 0~n"),
 				    start_new_turn_in_game( Tid, Gid, Match, 
 							    NewP2ScoreCard, 2 );
 				_ ->
 				    %% Still waiting for Player 1 to score.
 				    %% Just update player 2's info in the record
-				    io:format("Player 2 just scored a turn.  Just updating their record.~n"),
 				    ets:insert(?MatchTable, {{Tid, Gid},
 							     Match#match{p2ScoreCard =
 									     NewP2ScoreCard,
@@ -531,7 +523,6 @@ handle_info( {play_action, _Pid, Username,
 				true ->
 				    %% Nope, still waiting for Player 1.  Just
 				    %% update the match record
-				    io:format("Player 2 just scored a turn.  Just updating their record.~n"),
 				    ets:insert(?MatchTable, {{Tid, Gid},
 							     Match#match{p2ScoreCard =
 									     NewP2ScoreCard,
@@ -574,7 +565,6 @@ handle_info({request_tournament, Pid, {NumPlayers, GamesPerMatch}}, S) when (Gam
     io:format(utils:timestamp() ++ ": asking players if they want to join the tournament~n"),
     lists:foreach(fun(X) -> 
         Player = hd(X),
-        io:format("~p~n", [Player]),
 			  [{PlayerName, PlayerInfo}] = ets:lookup(?CurrentPlayerLoginInfo, Player),
 			  handle_ask_player(PlayerName, PlayerInfo, Tid) 
 		  end, ChosenPlayers),
@@ -829,7 +819,6 @@ start_tournament(Tid, T) ->
     
     %% Regardless of the number of players in the tournament, every real match
     %% got added to the match table, so now we can start those matches properly.
-    io:format("UpdatedBracket: ~p~n", [UpdatedBracket]),
     Matches = ets:match( ?MatchTable, { {Tid, '$1'}, '$2' } ),
     io:format( utils:timestamp() ++ ": Matches are: ~p~n", [Matches] ),
     NewT = T#tournament{ started = true,
@@ -1015,7 +1004,6 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 				     p1Win = P1Win, p2Win = P2Win,
 				     p1 = P1, p2 = P2,
 				     isTiebreak = IsTiebreak}) ->
-    io:format("starting new game with players ~p ~p~n", [P1, P2]),
 
     Gid = make_ref(),
 
