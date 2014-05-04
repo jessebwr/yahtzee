@@ -1103,6 +1103,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     P1Pid ! {end_tournament, self(), P1, Tid},
 
     {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P2, [] ),
+    io:format( utils:timestamp() ++ ": New bracket is: ~p~n", [NewBracket] ),
     case NewOpponent of 
     	undefined ->
     	    %% Send Player 2 a tournament_over message since the tournament
