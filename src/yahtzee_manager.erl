@@ -325,7 +325,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 	    case Username of
 		P1 ->
 		    case RollNum of
-			P1RollNum when RollNum =< 3, RollNum > 0 ->
+			P1RollNum when RollNum < 3, RollNum > 0 ->
 			    NewDiceList = 
 				updateDiceList( M#match.p1ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p1RollNum = RollNum + 1,
@@ -342,7 +342,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 		    end;
 		P2 ->
 		    case RollNum of
-			P2RollNum when RollNum =< 3, RollNum > 0 ->
+			P2RollNum when RollNum < 3, RollNum > 0 ->
 			    NewDiceList = 
 				updateDiceList( M#match.p2ListOfDice, DiceToKeep ),
 			    NewMatch = M#match{p2RollNum = RollNum + 1,
@@ -393,56 +393,57 @@ handle_info( {play_action, _Pid, Username,
 	    %% was valid, i.e. if the given line is actually blank in their
 	    %% score card
 	    case lists:nth(ScoreCardLine, P1ScoreCard) of
-		-1 ->
-		    %% Yay, all good.  Take the first 5 dice (i.e. the dice 
-		    %% the player has right now) and use them to update the
-		    %% player's score card.
-		    NewP1ScoreCard = updateScoreCard(P1ScoreCard, ScoreCardLine, 
-						     lists:sublist(P1ListOfDice, 5) ),
-		    %% Now check whether this ended the game
-		    case lists:member(-1, NewP1ScoreCard) of
-			true ->
-			    %% The game isn't over yet.  Check if Player 2 has
-			    %% scored this turn yet
-			    case P2RollNum of
-				0 ->
-				    %% Player 2 has already scored this turn.
-				    %% So we can go ahead and start the next
-				    %% turn
-				    start_new_turn_in_game( Tid, Gid, Match, 
-							    NewP1ScoreCard, 1 );
-				_ ->
-				    %% Still waiting for Player 2 to score.
-				    %% Just update player 1's info in the record
-				    ets:insert(?MatchTable, {{Tid, Gid},
-							     Match#match{p1ScoreCard =
-									     NewP1ScoreCard,
-									 p1RollNum = 0
-									}})
-			    end; %% case p2RollNum
+    		-1 ->
+    		    %% Yay, all good.  Take the first 5 dice (i.e. the dice 
+    		    %% the player has right now) and use them to update the
+    		    %% player's score card.
+    		    NewP1ScoreCard = updateScoreCard(P1ScoreCard, ScoreCardLine, 
+    						     lists:sublist(P1ListOfDice, 5) ),
+    		    %% Now check whether this ended the game
+    		    case lists:member(-1, NewP1ScoreCard) of
+        			true ->
+        			    %% The game isn't over yet.  Check if Player 2 has
+        			    %% scored this turn yet
+        			    case P2RollNum of
+            				0 ->
+            				    %% Player 2 has already scored this turn.
+            				    %% So we can go ahead and start the next
+            				    %% turn
+                        io:format("About to start new turn in game P2rollnum is 0~n"),
+            				    start_new_turn_in_game( Tid, Gid, Match, 
+            							    NewP1ScoreCard, 1 );
+            				_ ->
+            				    %% Still waiting for Player 2 to score.
+            				    %% Just update player 1's info in the record
+            				    ets:insert(?MatchTable, {{Tid, Gid},
+            							     Match#match{p1ScoreCard =
+            									     NewP1ScoreCard,
+            									 p1RollNum = 0
+            									}})
+        			    end; %% case p2RollNum
 
 			false ->
 			    %% Player 1 is now done with this game.  Is Player 2?
 			    case lists:member(-1, P2ScoreCard) of
-				false ->
-				    %% Yes, Player 2 is done.  Start the next
-				    %% game (or advance the winner to the next
-				    %% round if in fact the match is over, but
-				    %% that is handled in the helper function).
-				    %% Make sure to give the helper function the
-				    %% latest score card for Player 1
-				    game_ended( Tid, Gid, 
-						Match#match{ 
-						  p1ScoreCard = NewP1ScoreCard
-						 });
-				true ->
-				    %% Nope, still waiting for Player 2.  Just
-				    %% update the match record
-				    ets:insert(?MatchTable, {{Tid, Gid},
-							     Match#match{p1ScoreCard =
-									     NewP1ScoreCard,
-									 p1RollNum = 0
-									}})
+    				false ->
+    				    %% Yes, Player 2 is done.  Start the next
+    				    %% game (or advance the winner to the next
+    				    %% round if in fact the match is over, but
+    				    %% that is handled in the helper function).
+    				    %% Make sure to give the helper function the
+    				    %% latest score card for Player 1
+    				    game_ended( Tid, Gid, 
+    						Match#match{ 
+    						  p1ScoreCard = NewP1ScoreCard
+    						 });
+    				true ->
+    				    %% Nope, still waiting for Player 2.  Just
+    				    %% update the match record
+    				    ets:insert(?MatchTable, {{Tid, Gid},
+    							     Match#match{p1ScoreCard =
+    									     NewP1ScoreCard,
+    									 p1RollNum = 0
+    									}})
 			    end %% case member(-1, P2ScoreCard)
 			end; %% case member(-1, P1ScoreCard)
 			
@@ -484,6 +485,7 @@ handle_info( {play_action, _Pid, Username,
 				    %% Player 1 has already scored this turn.
 				    %% So we can go ahead and start the next
 				    %% turn
+            io:format("About to start new turn in game P1rollnum is 0~n"),
 				    start_new_turn_in_game( Tid, Gid, Match, 
 							    NewP2ScoreCard, 2 );
 				_ ->
@@ -793,7 +795,8 @@ start_tournament(Tid, T) ->
     io:format( utils:timestamp() ++ ": Starting to make UpdatedBracket; OnlyOneRound is ~p~n", [OnlyOneRound] ),
     UpdatedBracket = if 
 			 OnlyOneRound ->
-			     create_single_round_match([RoundOne], Tid);
+			     SingleMatch = create_single_round_match([RoundOne], Tid),
+           SingleMatch ++ [[none]];
 			 not OnlyOneRound ->
 			     Bracket = initialize_later_rounds( RoundOne, [], 0, utils:log2( length(RoundOne) ) ),
 			     create_matches( Bracket, 0, Tid, RoundOne)
@@ -982,6 +985,7 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 				     p1Win = P1Win, p2Win = P2Win,
 				     p1 = P1, p2 = P2,
 				     isTiebreak = IsTiebreak}) ->
+    io:format("starting new game with players ~p ~p~n", [P1, P2]),
 
     Gid = make_ref(),
 

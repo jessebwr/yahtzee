@@ -96,8 +96,6 @@
 
 main(Params) ->
   % table to store score line values
-  ets:new(score_list, [set, public, named_table]),
-  ets:insert(score_list, {key, [1,2,3,4,5,6,7,8,9,10,11,12,13]}),
   NodeName = hd(Params),
   Username = hd(tl(Params)),
   Password = hd(tl(tl(Params))),
@@ -124,6 +122,8 @@ main(Params) ->
 %% @spec init({NodesToConnectTo}) -> {ok, State}.
 init({Username, Password, TournamentManagerNames}) ->
   login_to_managers(TournamentManagerNames, Username, Password),
+  ets:new(score_list, [set, public, named_table]),
+  ets:insert(score_list, {key, [1,2,3,4,5,6,7,8,9,10,11,12,13]}),
   {ok, #state{username = Username,
               tournamentDict = dict:new(),
               loggedIn = true}}.
@@ -256,12 +256,8 @@ playerAI(RollNumber, Dice, _, _) when (length(Dice) == 5), RollNumber == 3 ->
   [{key, ScorecardValueList}] = ets:lookup(score_list, key),
   case ScorecardValueList of
     [] ->
-      ets:insert(score_list, {key, [1,2,3,4,5,6,7,8,9,10,11,12,13]}),
-      [{key, NewScorecardValueList}] = ets:lookup(score_list, key),
-      Score = hd(NewScorecardValueList),
-      NewScoreList = tl(NewScorecardValueList),
-
-      ets:insert(score_list, {key, NewScoreList}),
+      Score = 1,
+      ets:insert(score_list, {key, [2,3,4,5,6,7,8,9,10,11,12,13]}),
       {[true, true, true, true, true], Score};
     _ ->
       Score = hd(ScorecardValueList),
