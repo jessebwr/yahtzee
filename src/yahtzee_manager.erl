@@ -1078,7 +1078,7 @@ start_new_turn_in_game( Tid, Gid, Match, NewP2ScoreCard, 2 ) ->
 			    p2ScoreCard = NewP2ScoreCard,
 			    p1ListOfDice = Dice,
 			    p2ListOfDice = Dice
-					}
+					},
     ets:insert(?MatchTable, {{Tid, Gid}, NewMatch }),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
 							       
