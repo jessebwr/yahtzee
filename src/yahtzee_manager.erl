@@ -105,7 +105,7 @@ init({}) ->
     ets:new(?MatchTable, [set, public, named_table]),
 
     %% A dictionary of Username:{Pid, MonitorRef, LoginTicket}
-    ets:new(?CurrentPlayerLoginInfo, [set, ublic, named_table]),
+    ets:new(?CurrentPlayerLoginInfo, [set, public, named_table]),
 
     io:format(utils:timestamp() ++ ": all ets tables succesfully initialized~n"),
 
