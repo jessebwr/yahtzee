@@ -1029,7 +1029,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     ets:insert(?UserInfo, {P1, P1Info#user{match_wins =
 					       P1Info#user.match_wins + 1}}),
     ets:insert(?UserInfo, {P2, P2Info#user{match_losses =
-					       P1Info#user.match_losses + 1}}),
+					       P2Info#user.match_losses + 1}}),
 
     [{Tid, T = #tournament{bracket = Bracket, listOfPlayers = PlayerList}}] =
   	ets:lookup(?TournamentInfo, Tid),
@@ -1063,7 +1063,52 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     			       p1ListOfDice = Dice, p2ListOfDice = Dice },
     	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
     	    sendDice( Tid, NewGid, NewMatch, 5, 5 )
+    end;
+
+match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
+  when P2Win > P1Win ->
+    %% Player 2 won the match, Player 1 lost.
+    [{P1, P1Info}] = ets:lookup(?UserInfo, P1),
+    [{P2, P2Info}] = ets:lookup(?UserInfo, P2),
+    ets:insert(?UserInfo, {P1, P1Info#user{match_losses =
+					       P1Info#user.match_losses + 1}}),
+    ets:insert(?UserInfo, {P2, P2Info#user{match_wins =
+					       P2Info#user.match_wins + 1}}),
+
+    [{Tid, T = #tournament{bracket = Bracket, listOfPlayers = PlayerList}}] =
+  	ets:lookup(?TournamentInfo, Tid),
+      
+    %% Send Player 2 a tournament_over message since they just got knocked out
+    %% of the single-elimination tournament
+    {P1, P1Pid} = lists:keyfind( P1, 0, PlayerList ),
+    P1Pid ! {end_tournament, self(), P1, Tid},
+
+    {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P2, [] ),
+    case NewOpponent of 
+    	undefined ->
+    	    %% Send Player 2 a tournament_over message since the tournament
+    	    %% ended
+    	    {P2, P2Pid} = lists:keyfind( P2, 0, PlayerList ),
+    	    P2Pid ! {end_tournament, self(), P2, Tid},
+
+    	    %% The tournament is over, Player 1 won, update the tournament
+    	    ets:insert(Tid, T#tournament{bracket = NewBracket,
+    					 status = completed,
+    					 winner = P2});
+    	none ->
+    	    %% The next round opponent hasn't finished the previous match yet
+    	    %% Do nothing...
+    	    ok;
+    	_ ->
+    	    %% Oh good, already have a next opponent!  Let's start up this match
+    	    NewGid = make_ref(),
+    	    Dice = generateDice(),
+    	    NewMatch = #match{ p1 = P2, p2 = NewOpponent,
+    			       p1ListOfDice = Dice, p2ListOfDice = Dice },
+    	    ets:insert(?MatchTable, {{Tid, NewGid}, NewMatch}),
+    	    sendDice( Tid, NewGid, NewMatch, 5, 5 )
     end.
+
     
 				     
     
