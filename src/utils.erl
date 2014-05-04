@@ -5,7 +5,9 @@
          timestamp/0,
          log2/1,
 	 count/2,
-	 set_list_index/3]).
+	 set_list_index/3,
+	index_of/3,
+	ceiling/1]).
 
 %% @spec nextPow2(X) -> integer()
 %% @doc Finds the next power of 2 that is greater than X,
@@ -44,3 +46,17 @@ set_list_index( List, Index, Value ) ->
 
 count(List, Elem) ->
     length([ok || I <- List, I == Elem]).
+
+
+index_of( Elem, [Elem | _RestList], Index ) ->
+    Index;
+
+index_of( Elem, [_ | RestList], Index ) ->
+    index_of( Elem, RestList, Index + 1 ).
+
+
+ceiling( Number ) when is_number(Number), Number > 0 ->
+    erlang:trunc(Number) + 1.
+
+
+
