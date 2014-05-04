@@ -367,7 +367,7 @@ handle_info({ play_action, Pid, Username, {Ref, Tid, Gid, RollNum, DiceToKeep, 0
 %% %% Scoring move!  :(
 handle_info( {play_action, _Pid, Username, 
 	      {_Ref, Tid, Gid, RollNum, DiceToKeep, ScoreCardLine}}, S) ->
-    io:format(utils:timestamp() ++ ": received play_action message from ~p "
+    io:format(utils:timestamp() ++ ": received a scoring play_action message from ~p "
 	      ++ "with the following info~nTid: ~p~n"
 	      ++ "Gid: ~p~nRollNum: ~p~n"
 	      ++ "DiceToKeep: ~p~n"
@@ -1024,6 +1024,7 @@ start_new_game_in_match( Tid, #match{currentGame = CurrentGame,
 %% as over, if appropriate
 match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
   when P1Win > P2Win ->
+    io:format( utils:timestamp() ++ "~p won a match against ~p in tournament ~p!", [P1, P2, Tid] ),
     %% Player 1 won the match, Player 2 lost.
     [{P1, P1Info}] = ets:lookup(?UserInfo, P1),
     [{P2, P2Info}] = ets:lookup(?UserInfo, P2),
@@ -1043,6 +1044,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     {NewOpponent, NewBracket} = advanceWinnerToNextRound( Bracket, P1, [] ),
     case NewOpponent of 
     	undefined ->
+	    io:format( utils:timestamp() ++ ": ~p won tournament ~p!", [P1, Tid] ),
     	    %% Send Player 1 a tournament_over message since the tournament
     	    %% ended
     	    {P1, P1Pid} = lists:keyfind( P1, 1, PlayerList ),
@@ -1068,6 +1070,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
 
 match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
   when P2Win > P1Win ->
+    io:format( utils:timestamp() ++ "~p won a match against ~p in tournament ~p!", [P2, P1, Tid] ),
     %% Player 2 won the match, Player 1 lost.
     [{P1, P1Info}] = ets:lookup(?UserInfo, P1),
     [{P2, P2Info}] = ets:lookup(?UserInfo, P2),
@@ -1089,6 +1092,7 @@ match_ended( Tid, #match{p1Win = P1Win, p2Win = P2Win, p1 = P1, p2 = P2} )
     	undefined ->
     	    %% Send Player 2 a tournament_over message since the tournament
     	    %% ended
+	    io:format( utils:timestamp() ++ ": ~p won tournament ~p!", [P2, Tid] ),
     	    {P2, P2Pid} = lists:keyfind( P2, 1, PlayerList ),
     	    P2Pid ! {end_tournament, self(), P2, Tid},
 
