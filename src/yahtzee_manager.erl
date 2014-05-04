@@ -230,7 +230,7 @@ handle_info({accept_tournament, Pid, Username, {Tid, LoginTicket}}, S) ->
 
 		false ->
 		    %% Since they accepted, add them to the dictionary of players
-		    NewListOfPlayers = T#tournament.listOfPlayers ++ [Username],
+		    NewListOfPlayers = [ {Username, Pid} | T#tournament.listOfPlayers],
 
 		    %% If we have enough players, start the tournament
 		    NumPlayersReplied = T#tournament.numPlayersReplied + 1,
