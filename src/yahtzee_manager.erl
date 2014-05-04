@@ -165,6 +165,8 @@ handle_info({login, Pid, Username, {Username, Password}}, S) ->
                 ets:insert(?NotDead, {Username, ok}),
                 UserMatchesP1 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p1 = Username} }),
                 UserMatchesP2 = ets:match( ?MatchTable, { {'$1', '$2'}, #match{p2 = Username} }),
+                io:format("Ets ~p~n", [ets:tab2list(?MatchTable)]),
+                io:format("His matches were ~p~n", [UserMatchesP1 ++ UserMatchesP2]),
                 lists:foreach(fun({Tid, Gid}) -> [{{Tid, Gid},Match}] = ets:lookup(?MatchTable),
                                                  start_matches(Tid, [[Gid, Match]]) end, UserMatchesP1),
                 lists:foreach(fun({Tid, Gid}) -> [{{Tid, Gid},Match}] = ets:lookup(?MatchTable),
@@ -1003,11 +1005,13 @@ game_ended( Tid, Gid, Match = #match{p1ScoreCard = P1ScoreCard,
 start_tiebreak_match( Tid, #match{p1 = P1, p2 = P2} ) ->
     io:format( utils:timestamp() ++ ": Starting a tiebreak match for tournament ~p between players ~p and ~p.", [Tid, P1, P2
 ] ),
-    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true},
     Gid = make_ref(),
+    P1TDice = generateDice(),
+    P2TDice = generateDice(),
+    NewMatch = #match{p1 = P1, p2 = P2, isTiebreak = true, p1ListOfDice = P1TDice,
+             p2ListOfDice = P2TDice},
     ets:insert(?MatchTable,
-	       {{Tid, Gid}, NewMatch#match{p1ListOfDice = generateDice(),
-					   p2ListOfDice = generateDice()}}),
+	       {{Tid, Gid}, NewMatch}),
     sendDice( Tid, Gid, NewMatch, 5, 5 ).
     
 
